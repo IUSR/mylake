@@ -32,7 +32,7 @@ public class DeltaLakeResource {
     @GET
     @Path("/tables")
     public Response tables(@QueryParam("path") String path) {
-        if (path == null || path.isBlank()) return bad("缺少 path 参数");
+        if (path == null || path.isBlank()) return bad("missing 'path' parameter");
         try {
             List<TableInfo> tables = svc.listTables(path);
             return Response.ok(Map.of("tables", tables)).build();
@@ -52,11 +52,11 @@ public class DeltaLakeResource {
             @QueryParam("page") @DefaultValue("0") int page,
             @QueryParam("size") @DefaultValue("50") int size) {
 
-        if (path == null || path.isBlank()) return bad("缺少 path 参数");
-        if (table == null || table.isBlank()) return bad("缺少 table 参数");
+        if (path == null || path.isBlank()) return bad("missing 'path' parameter");
+        if (table == null || table.isBlank()) return bad("missing 'table' parameter");
         // Prevent path traversal
         if (table.contains("..") || table.contains("/") || table.contains("\\")) {
-            return bad("非法的表名");
+            return bad("invalid table name");
         }
 
         page = Math.max(0, page);
@@ -82,6 +82,6 @@ public class DeltaLakeResource {
     }
 
     private static Response err(String msg) {
-        return Response.status(500).entity(Map.of("error", msg != null ? msg : "内部错误")).build();
+        return Response.status(500).entity(Map.of("error", msg != null ? msg : "internal error")).build();
     }
 }

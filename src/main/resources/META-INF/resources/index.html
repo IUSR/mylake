@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MyLake — Delta Lake 浏览器</title>
+  <title>MyLake — Delta Lake Browser</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root { --sidebar-w: 280px; }
@@ -76,9 +76,9 @@
 <!-- Navbar -->
 <nav class="navbar navbar-dark px-3 py-2">
   <span class="navbar-brand mb-0">
-    MyLake <small>Delta Lake 浏览器</small>
+    MyLake <small>Delta Lake Browser</small>
   </span>
-  <span id="status-badge" class="badge bg-secondary px-2 py-1">检测中…</span>
+  <span id="status-badge" class="badge bg-secondary px-2 py-1">Checking…</span>
 </nav>
 
 <!-- Path bar -->
@@ -90,9 +90,9 @@
       </svg>
     </span>
     <input id="lake-path" type="text" class="form-control border-start-0"
-           placeholder="Delta Lake 根目录路径，例如 /data/my_lake"
+           placeholder="Delta Lake root directory, e.g. /data/my_lake"
            autocomplete="off">
-    <button class="btn btn-primary px-3" onclick="loadTables()">加载表</button>
+    <button class="btn btn-primary px-3" onclick="loadTables()">Load Tables</button>
   </div>
 </div>
 
@@ -101,11 +101,11 @@
 
   <!-- Sidebar -->
   <div id="sidebar">
-    <div class="sidebar-header">数据表</div>
+    <div class="sidebar-header">Tables</div>
     <div id="table-list">
       <div class="state-box">
         <div class="icon">🗂</div>
-        <div>输入路径并点击「加载表」</div>
+        <div>Enter a path and click "Load Tables"</div>
       </div>
     </div>
   </div>
@@ -115,7 +115,7 @@
     <div id="content-inner" style="display:flex;flex-direction:column;height:100%">
       <div class="state-box">
         <div class="icon">📊</div>
-        <div>从左侧选择一张表</div>
+        <div>Select a table from the list</div>
       </div>
     </div>
   </div>
@@ -164,15 +164,15 @@ async function checkStatus() {
   try {
     const d = await apiFetch('/api/status');
     if (d.ready) {
-      badge.textContent = 'Delta 就绪';
+      badge.textContent = 'Delta Ready';
       badge.className = 'badge bg-success px-2 py-1';
     } else {
-      badge.textContent = 'Delta 未就绪';
+      badge.textContent = 'Delta Not Ready';
       badge.className = 'badge bg-danger px-2 py-1';
-      if (d.error) showErr('Delta 扩展加载失败: ' + d.error);
+      if (d.error) showErr('Failed to load delta extension: ' + d.error);
     }
   } catch {
-    badge.textContent = '服务离线';
+    badge.textContent = 'Server Offline';
     badge.className = 'badge bg-danger px-2 py-1';
   }
 }
@@ -180,18 +180,18 @@ async function checkStatus() {
 // ── Load table list ───────────────────────────────────────────────────────────
 async function loadTables() {
   const path = document.getElementById('lake-path').value.trim();
-  if (!path) { showErr('请输入目录路径'); return; }
+  if (!path) { showErr('Please enter a directory path'); return; }
   state.lakePath = path;
   state.table = '';
 
   const list = document.getElementById('table-list');
-  list.innerHTML = spinner('加载表列表…');
+  list.innerHTML = spinner('Loading tables…');
   resetContent();
 
   try {
     const d = await apiFetch('/api/tables?path=' + enc(path));
     if (d.tables.length === 0) {
-      list.innerHTML = `<div class="state-box"><div class="icon">📭</div><div>未找到 Delta 表</div></div>`;
+      list.innerHTML = `<div class="state-box"><div class="icon">📭</div><div>No Delta tables found</div></div>`;
       return;
     }
     list.innerHTML = d.tables.map(t => `
@@ -215,7 +215,7 @@ async function selectTable(name) {
 
 async function loadData() {
   const inner = document.getElementById('content-inner');
-  inner.innerHTML = spinner('加载数据…');
+  inner.innerHTML = spinner('Loading data…');
 
   try {
     const url = `/api/table/data?path=${enc(state.lakePath)}&table=${enc(state.table)}&page=${state.page}&size=${state.pageSize}`;
@@ -238,11 +238,11 @@ function renderTable(d) {
   const headerHtml = `
     <div id="content-header">
       <span class="tbl-title">${esc(state.table)}</span>
-      <span class="meta-badge">${totalRows.toLocaleString()} 行</span>
+      <span class="meta-badge">${totalRows.toLocaleString()} rows</span>
       <span class="meta-badge">·</span>
-      <span class="meta-badge">${columns.length} 列</span>
+      <span class="meta-badge">${columns.length} columns</span>
       <div class="ms-auto d-flex align-items-center gap-2">
-        <label class="text-muted mb-0" style="font-size:.8rem">每页</label>
+        <label class="text-muted mb-0" style="font-size:.8rem">Per page</label>
         <select class="form-select form-select-sm" style="width:75px" onchange="changeSize(+this.value)">
           ${[20,50,100,200].map(n => `<option${n===pageSize?' selected':''}>${n}</option>`).join('')}
         </select>
@@ -256,7 +256,7 @@ function renderTable(d) {
   </tr>`;
 
   const tbody = rows.length === 0
-    ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">（无数据）</td></tr>`
+    ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">(no data)</td></tr>`
     : rows.map((row, i) => `<tr>
         <td class="row-num">${(start + i).toLocaleString()}</td>
         ${row.map(v => `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`).join('')}
@@ -267,12 +267,12 @@ function renderTable(d) {
   const pager  = `
     <div id="pager" class="d-flex justify-content-between align-items-center">
       <span class="text-muted" style="font-size:.8rem">
-        显示 ${start.toLocaleString()} – ${end.toLocaleString()}，共 ${totalRows.toLocaleString()} 行
+        Showing ${start.toLocaleString()} – ${end.toLocaleString()} of ${totalRows.toLocaleString()} rows
       </span>
-      <nav aria-label="分页">
+      <nav aria-label="Pagination">
         <ul class="pagination pagination-sm mb-0">
           <li class="page-item ${page===0?'disabled':''}">
-            <a class="page-link" href="#" onclick="goPage(0);return false" title="第一页">«</a></li>
+            <a class="page-link" href="#" onclick="goPage(0);return false" title="First page">«</a></li>
           <li class="page-item ${page===0?'disabled':''}">
             <a class="page-link" href="#" onclick="goPage(${page-1});return false">‹</a></li>
           ${pages.map(p => p === '…'
@@ -283,7 +283,7 @@ function renderTable(d) {
           <li class="page-item ${page>=totalPages-1?'disabled':''}">
             <a class="page-link" href="#" onclick="goPage(${page+1});return false">›</a></li>
           <li class="page-item ${page>=totalPages-1?'disabled':''}">
-            <a class="page-link" href="#" onclick="goPage(${totalPages-1});return false" title="最后页">»</a></li>
+            <a class="page-link" href="#" onclick="goPage(${totalPages-1});return false" title="Last page">»</a></li>
         </ul>
       </nav>
     </div>`;
@@ -328,7 +328,7 @@ async function changeSize(n) {
 // ── Misc ───────────────────────────────────────────────────────────────────────
 function resetContent() {
   document.getElementById('content-inner').innerHTML =
-    `<div class="state-box"><div class="icon">📊</div><div>从左侧选择一张表</div></div>`;
+    `<div class="state-box"><div class="icon">📊</div><div>Select a table from the list</div></div>`;
 }
 
 function spinner(msg) {

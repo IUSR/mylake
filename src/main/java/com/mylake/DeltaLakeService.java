@@ -72,10 +72,10 @@ public class DeltaLakeService {
     public List<TableInfo> listTables(String lakePath) throws IOException {
         Path root = Path.of(lakePath);
         if (!Files.exists(root)) {
-            throw new IllegalArgumentException("路径不存在: " + lakePath);
+            throw new IllegalArgumentException("Path does not exist: " + lakePath);
         }
         if (!Files.isDirectory(root)) {
-            throw new IllegalArgumentException("不是目录: " + lakePath);
+            throw new IllegalArgumentException("Not a directory: " + lakePath);
         }
         try (Stream<Path> stream = Files.list(root)) {
             return stream
@@ -92,10 +92,10 @@ public class DeltaLakeService {
      */
     public synchronized TableData query(String tablePath, int page, int pageSize) throws SQLException {
         if (!ready) {
-            throw new IllegalStateException("Delta 扩展未就绪" + (initError != null ? ": " + initError : ""));
+            throw new IllegalStateException("Delta extension not ready" + (initError != null ? ": " + initError : ""));
         }
         if (tablePath.contains("'") || tablePath.contains(";")) {
-            throw new IllegalArgumentException("路径包含非法字符");
+            throw new IllegalArgumentException("Path contains invalid characters");
         }
 
         // Escape backslashes for DuckDB string literal
