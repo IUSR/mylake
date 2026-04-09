@@ -69,6 +69,19 @@
 
     /* Toast */
     .toast-container { z-index: 9999; }
+
+    /* Directory browser modal */
+    #browse-current-path { font-family: monospace; font-size: .82rem; padding: .5rem .75rem;
+                           background: #f8f9fa; border-bottom: 1px solid #dee2e6;
+                           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .browse-item  { display: flex; align-items: center; gap: .5rem; padding: .42rem .75rem;
+                    cursor: pointer; border-bottom: 1px solid #f5f5f5; transition: background .1s; }
+    .browse-item:hover  { background: #f0f5ff; }
+    .browse-item:last-child { border-bottom: none; }
+    .browse-up    { background: #fafafa; }
+    .browse-up:hover { background: #eef3ff; }
+    .browse-icon  { font-size: 1rem; flex-shrink: 0; }
+    .browse-name  { font-size: .87rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -92,6 +105,11 @@
     <input id="lake-path" type="text" class="form-control border-start-0"
            placeholder="Delta Lake root directory, e.g. /data/my_lake"
            autocomplete="off">
+    <button class="btn btn-outline-secondary px-3" onclick="openBrowseModal()" title="Browse filesystem">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0 1 15 5.5v.64c.57.265.94.876.856 1.546l-.64 5.124A2.5 2.5 0 0 1 12.733 15H3.266a2.5 2.5 0 0 1-2.481-2.19l-.64-5.124A1.5 1.5 0 0 1 1 6.14zm2 6a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5zm0-3a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5z"/>
+      </svg>
+    </button>
     <button class="btn btn-primary px-3" onclick="loadTables()">Load Tables</button>
   </div>
 </div>
@@ -120,6 +138,31 @@
     </div>
   </div>
 
+</div>
+
+<!-- Directory browser modal -->
+<div class="modal fade" id="browse-modal" tabindex="-1" aria-labelledby="browse-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="browse-modal-label">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+            <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0 1 15 5.5v.64c.57.265.94.876.856 1.546l-.64 5.124A2.5 2.5 0 0 1 12.733 15H3.266a2.5 2.5 0 0 1-2.481-2.19l-.64-5.124A1.5 1.5 0 0 1 1 6.14zm2 6a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5zm0-3a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5z"/>
+          </svg>
+          Select Directory
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div id="browse-current-path" class="text-muted">/</div>
+      <div class="modal-body p-0">
+        <div id="browse-list" style="min-height: 200px; max-height: 380px; overflow-y: auto;"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="confirmBrowse()">Select This Directory</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Error toast -->
@@ -352,6 +395,70 @@ function attr(s) {
   return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function enc(s) { return encodeURIComponent(s); }
+
+// ── Directory browser ──────────────────────────────────────────────────────────
+let browseCurrentPath = '';
+let browseModal = null;
+
+async function openBrowseModal() {
+  browseModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('browse-modal'));
+  browseModal.show();
+  // Start from the current path input value, falling back to server CWD
+  const existing = document.getElementById('lake-path').value.trim();
+  if (existing) {
+    await browseTo(existing);
+  } else {
+    try {
+      const d = await apiFetch('/api/fs/cwd');
+      await browseTo(d.path);
+    } catch {
+      await browseTo('/');
+    }
+  }
+}
+
+async function browseTo(path) {
+  const listEl = document.getElementById('browse-list');
+  const pathEl = document.getElementById('browse-current-path');
+  listEl.innerHTML = `<div class="p-3 text-center text-muted">
+    <div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading…</div>`;
+
+  try {
+    const d = await apiFetch('/api/fs/browse?path=' + enc(path));
+    browseCurrentPath = d.path;
+    pathEl.textContent = d.path;
+
+    let html = '';
+
+    if (d.parent !== null) {
+      html += `<div class="browse-item browse-up" onclick="browseTo('${attr(d.parent)}')">
+        <span class="browse-icon">📁</span>
+        <span class="browse-name fw-semibold">..</span>
+        <span class="text-muted ms-2" style="font-size:.78rem">parent directory</span>
+      </div>`;
+    }
+
+    if (d.dirs.length === 0) {
+      html += `<div class="p-3 text-center text-muted" style="font-size:.85rem">No subdirectories</div>`;
+    } else {
+      html += d.dirs.map(entry => `
+        <div class="browse-item" onclick="browseTo('${attr(entry.path)}')">
+          <span class="browse-icon">📁</span>
+          <span class="browse-name">${esc(entry.name)}</span>
+        </div>`).join('');
+    }
+
+    listEl.innerHTML = html;
+  } catch (e) {
+    listEl.innerHTML = `<div class="p-3 text-danger">${esc(e.message)}</div>`;
+    pathEl.textContent = path;
+  }
+}
+
+function confirmBrowse() {
+  document.getElementById('lake-path').value = browseCurrentPath;
+  browseModal?.hide();
+}
 </script>
 </body>
 </html>
