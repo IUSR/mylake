@@ -65,6 +65,13 @@
     .navbar-brand { font-weight: 700; letter-spacing: .03em; color: #fff !important; }
     .navbar-brand small { color: #8b9ec7; font-size: .75rem; }
 
+    /* Language switcher */
+    .lang-btn { font-size: .78rem; padding: .2rem .55rem; border-radius: 4px;
+                cursor: pointer; border: 1px solid #8b9ec7; color: #8b9ec7;
+                background: transparent; transition: all .15s; line-height: 1.4; }
+    .lang-btn:hover { border-color: #fff; color: #fff; }
+    .lang-btn.active { border-color: #fff; color: #1a1f36; background: #fff; font-weight: 600; }
+
     /* Path bar */
     #path-bar { background: #fff; border-bottom: 1px solid #dee2e6; padding: .6rem 1rem; }
     #path-bar .input-group { max-width: 720px; }
@@ -143,7 +150,9 @@
   </span>
   <div class="d-flex align-items-center gap-2">
     <button id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
-    <span id="status-badge" class="badge bg-secondary px-2 py-1">Checking…</span>
+    <button class="lang-btn active" id="lang-en" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" id="lang-zh" onclick="setLang('zh')">中文</button>
+    <span id="status-badge" class="badge bg-secondary px-2 py-1 ms-2">Checking…</span>
   </div>
 </nav>
 
@@ -173,7 +182,7 @@
         aria-labelledby="recent-paths-toggle">
       <li><span class="dropdown-item disabled">No recent paths</span></li>
     </ul>
-    <button class="btn btn-primary px-3" onclick="loadTables()">Load Tables</button>
+    <button class="btn btn-primary px-3" onclick="loadTables()" data-i18n="loadTables">Load Tables</button>
   </div>
 </div>
 
@@ -182,11 +191,11 @@
 
   <!-- Sidebar -->
   <div id="sidebar">
-    <div class="sidebar-header">Tables</div>
+    <div class="sidebar-header" data-i18n="tables">Tables</div>
     <div id="table-list">
       <div class="state-box">
         <div class="icon">🗂</div>
-        <div>Enter a path and click "Load Tables"</div>
+        <div data-i18n="enterPath">Enter a path and click "Load Tables"</div>
       </div>
     </div>
   </div>
@@ -196,7 +205,7 @@
     <div id="content-inner" style="display:flex;flex-direction:column;height:100%">
       <div class="state-box">
         <div class="icon">📊</div>
-        <div>Select a table from the list</div>
+        <div data-i18n="selectTable">Select a table from the list</div>
       </div>
     </div>
   </div>
@@ -212,7 +221,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" class="me-1" viewBox="0 0 16 16">
             <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0 1 15 5.5v.64c.57.265.94.876.856 1.546l-.64 5.124A2.5 2.5 0 0 1 12.733 15H3.266a2.5 2.5 0 0 1-2.481-2.19l-.64-5.124A1.5 1.5 0 0 1 1 6.14zm2 6a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5zm0-3a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5z"/>
           </svg>
-          Select Directory
+          <span data-i18n="selectDirectory">Select Directory</span>
         </h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
@@ -221,8 +230,8 @@
         <div id="browse-list" style="min-height: 200px; max-height: 380px; overflow-y: auto;"></div>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-sm btn-primary" onclick="confirmBrowse()">Select This Directory</button>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="confirmBrowse()" data-i18n="selectThisDir">Select This Directory</button>
       </div>
     </div>
   </div>
@@ -240,6 +249,105 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// ── i18n ───────────────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+  en: {
+    loadTables:       'Load Tables',
+    tables:           'Tables',
+    enterPath:        'Enter a path and click "Load Tables"',
+    selectTable:      'Select a table from the list',
+    selectDirectory:  'Select Directory',
+    cancel:           'Cancel',
+    selectThisDir:    'Select This Directory',
+    statusChecking:   'Checking…',
+    statusReady:      'Delta Ready',
+    statusNotReady:   'Delta Not Ready',
+    statusOffline:    'Server Offline',
+    loadingTables:    'Loading tables…',
+    noTablesFound:    'No Delta tables found',
+    loadingData:      'Loading data…',
+    noData:           '(no data)',
+    perPage:          'Per page',
+    rowsPerPage:      'Rows per page',
+    showing:          'Showing',
+    of:               'of',
+    rows:             'rows',
+    columns:          'columns',
+    exportCsv:        'Export CSV',
+    parentDirectory:  'parent directory',
+    noSubdirs:        'No subdirectories',
+    errEnterPath:     'Please enter a directory path',
+    errDeltaExt:      'Failed to load delta extension: ',
+    errNothingExport: 'Nothing to export — load a table first.',
+    noRecentPaths:    'No recent paths',
+    pathPlaceholder:  'Delta Lake root directory, e.g. /data/my_lake',
+  },
+  zh: {
+    loadTables:       '加载表',
+    tables:           '数据表',
+    enterPath:        '输入路径并点击“加载表”',
+    selectTable:      '从列表中选择一张表',
+    selectDirectory:  '选择目录',
+    cancel:           '取消',
+    selectThisDir:    '选择此目录',
+    statusChecking:   '检查中…',
+    statusReady:      'Delta 就绪',
+    statusNotReady:   'Delta 未就绪',
+    statusOffline:    '服务器离线',
+    loadingTables:    '正在加载表…',
+    noTablesFound:    '未找到 Delta 表',
+    loadingData:      '正在加载数据…',
+    noData:           '（无数据）',
+    perPage:          '每页',
+    rowsPerPage:      '每页行数',
+    showing:          '显示',
+    of:               '共',
+    rows:             '行',
+    columns:          '列',
+    exportCsv:        '导出 CSV',
+    parentDirectory:  '上级目录',
+    noSubdirs:        '没有子目录',
+    errEnterPath:     '请输入目录路径',
+    errDeltaExt:      '加载 Delta 扩展失败：',
+    errNothingExport: '无内容可导出——请先加载一张表。',
+    noRecentPaths:    '暂无最近路径',
+    pathPlaceholder:  'Delta Lake 根目录，例如 /data/my_lake',
+  }
+};
+
+// Auto-detect from browser locale if no preference saved
+const _savedLang = localStorage.getItem('mylake-lang');
+const _browserLang = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+const _detectedLang = _browserLang.startsWith('zh') ? 'zh' : 'en';
+let currentLang = _savedLang || _detectedLang;
+
+function t(key) {
+  return (TRANSLATIONS[currentLang] || TRANSLATIONS.en)[key] || key;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('mylake-lang', lang);
+  applyTranslations();
+}
+
+function applyTranslations() {
+  // Update lang buttons
+  document.getElementById('lang-en').classList.toggle('active', currentLang === 'en');
+  document.getElementById('lang-zh').classList.toggle('active', currentLang === 'zh');
+
+  // Update html lang attribute
+  document.documentElement.lang = currentLang === 'zh' ? 'zh-Hans' : 'en';
+
+  // Update all elements with data-i18n attribute
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+
+  // Update path placeholder
+  document.getElementById('lake-path').placeholder = t('pathPlaceholder');
+}
+
 // ── Page-size preference (persisted) ──────────────────────────────────────────
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
 const PAGE_SIZE_DEFAULT = 50;
@@ -258,6 +366,7 @@ function loadPageSize() {
 function savePageSize(n) {
   try { localStorage.setItem(PAGE_SIZE_LS_KEY, String(n)); }
   catch { /* localStorage unavailable */ }
+}
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -285,6 +394,7 @@ document.getElementById('recent-paths-toggle')
   .addEventListener('show.bs.dropdown', renderRecentPathsMenu);
 renderRecentPathsMenu();
 initDarkMode();
+applyTranslations();
 checkStatus();
 
 // ── Recent lake paths (persisted) ─────────────────────────────────────────────
@@ -316,7 +426,7 @@ function renderRecentPathsMenu() {
   const menu = document.getElementById('recent-paths-menu');
   const paths = loadRecentPaths();
   if (paths.length === 0) {
-    menu.innerHTML = `<li><span class="dropdown-item disabled">No recent paths</span></li>`;
+    menu.innerHTML = `<li><span class="dropdown-item disabled">${t('noRecentPaths')}</span></li>`;
     return;
   }
   menu.innerHTML = paths.map(p => `
@@ -334,7 +444,7 @@ function useRecentPath(path) {
 async function apiFetch(url) {
   const resp = await fetch(url);
   const json = await resp.json();
-  if (!resp.ok) throw new Error(json.error || `HTTP ${resp.status}`);
+  if (!resp.ok) throw new Error(json.error || 'HTTP ' + resp.status);
   return json;
 }
 
@@ -365,31 +475,32 @@ function toggleDarkMode() {
 // ── Status ────────────────────────────────────────────────────────────────────
 async function checkStatus() {
   const badge = document.getElementById('status-badge');
+  badge.textContent = t('statusChecking');
   try {
     const d = await apiFetch('/api/status');
     if (d.ready) {
-      badge.textContent = 'Delta Ready';
-      badge.className = 'badge bg-success px-2 py-1';
+      badge.textContent = t('statusReady');
+      badge.className = 'badge bg-success px-2 py-1 ms-2';
     } else {
-      badge.textContent = 'Delta Not Ready';
-      badge.className = 'badge bg-danger px-2 py-1';
-      if (d.error) showErr('Failed to load delta extension: ' + d.error);
+      badge.textContent = t('statusNotReady');
+      badge.className = 'badge bg-danger px-2 py-1 ms-2';
+      if (d.error) showErr(t('errDeltaExt') + d.error);
     }
   } catch {
-    badge.textContent = 'Server Offline';
-    badge.className = 'badge bg-danger px-2 py-1';
+    badge.textContent = t('statusOffline');
+    badge.className = 'badge bg-danger px-2 py-1 ms-2';
   }
 }
 
 // ── Load table list ───────────────────────────────────────────────────────────
 async function loadTables() {
   const path = document.getElementById('lake-path').value.trim();
-  if (!path) { showErr('Please enter a directory path'); return; }
+  if (!path) { showErr(t('errEnterPath')); return; }
   state.lakePath = path;
   state.table = '';
 
   const list = document.getElementById('table-list');
-  list.innerHTML = spinner('Loading tables…');
+  list.innerHTML = spinner(t('loadingTables'));
   resetContent();
 
   try {
@@ -397,16 +508,16 @@ async function loadTables() {
     // Successful response — remember this path even if the lake has no tables yet.
     pushRecentPath(path);
     if (d.tables.length === 0) {
-      list.innerHTML = `<div class="state-box"><div class="icon">📭</div><div>No Delta tables found</div></div>`;
+      list.innerHTML = '<div class="state-box"><div class="icon">📭</div><div>' + esc(t('noTablesFound')) + '</div></div>';
       return;
     }
-    list.innerHTML = d.tables.map(t => `
-      <div class="tbl-item" data-name="${attr(t.name)}" onclick="selectTable('${attr(t.name)}')">
-        <div class="tbl-name">${esc(t.name)}</div>
-        <div class="tbl-path" title="${attr(t.path)}">${esc(t.path)}</div>
-      </div>`).join('');
+    list.innerHTML = d.tables.map(tbl =>
+      '<div class="tbl-item" data-name="' + attr(tbl.name) + '" onclick="selectTable(\'' + attr(tbl.name) + '\')">' +
+      '<div class="tbl-name">' + esc(tbl.name) + '</div>' +
+      '<div class="tbl-path" title="' + attr(tbl.path) + '">' + esc(tbl.path) + '</div>' +
+      '</div>').join('');
   } catch (e) {
-    list.innerHTML = `<div class="state-box"><div class="icon">⚠️</div><div>${esc(e.message)}</div></div>`;
+    list.innerHTML = '<div class="state-box"><div class="icon">⚠️</div><div>' + esc(e.message) + '</div></div>';
   }
 }
 
@@ -422,10 +533,10 @@ async function selectTable(name) {
 
 async function loadData() {
   const inner = document.getElementById('content-inner');
-  inner.innerHTML = spinner('Loading data…');
+  inner.innerHTML = spinner(t('loadingData'));
 
   try {
-    const url = `/api/table/data?path=${enc(state.lakePath)}&table=${enc(state.table)}&page=${state.page}&size=${state.pageSize}`;
+    const url = '/api/table/data?path=' + enc(state.lakePath) + '&table=' + enc(state.table) + '&page=' + state.page + '&size=' + state.pageSize;
     const d = await apiFetch(url);
     state.totalPages = d.totalPages;
     state.totalRows  = d.totalRows;
@@ -433,7 +544,7 @@ async function loadData() {
     state.lastRows    = d.rows;
     renderTable(d);
   } catch (e) {
-    inner.innerHTML = `<div class="state-box"><div class="icon">⚠️</div><div>${esc(e.message)}</div></div>`;
+    inner.innerHTML = '<div class="state-box"><div class="icon">⚠️</div><div>' + esc(e.message) + '</div></div>';
   }
 }
 
@@ -447,14 +558,14 @@ function renderTable(d) {
   const headerHtml = `
     <div id="content-header">
       <span class="tbl-title">${esc(state.table)}</span>
-      <span class="meta-badge">${totalRows.toLocaleString()} rows</span>
+      <span class="meta-badge">${totalRows.toLocaleString()} ${t('rows')}</span>
       <span class="meta-badge">·</span>
-      <span class="meta-badge">${columns.length} columns</span>
+      <span class="meta-badge">${columns.length} ${t('columns')}</span>
       <button class="btn btn-sm btn-outline-secondary"
               onclick="exportCsv()"
               ${rows.length === 0 ? 'disabled' : ''}
               title="Download the current page as CSV">
-        Export CSV
+        ${t('exportCsv')}
       </button>
       <button class="btn btn-sm btn-outline-secondary"
               onclick="exportJson()"
@@ -463,7 +574,7 @@ function renderTable(d) {
         Export JSON
       </button>
       <div class="ms-auto d-flex align-items-center gap-2">
-        <label class="text-muted mb-0" style="font-size:.8rem">Per page</label>
+        <label class="text-muted mb-0" style="font-size:.8rem">${t('perPage')}</label>
         <select class="form-select form-select-sm" style="width:75px" onchange="changeSize(+this.value)">
           ${[20,50,100,200].map(n => `<option${n===pageSize?' selected':''}>${n}</option>`).join('')}
         </select>
@@ -501,7 +612,7 @@ function renderTable(d) {
   </tr>`;
 
   const tbody = displayRows.length === 0
-    ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">(no data)</td></tr>`
+    ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">${t('noData')}</td></tr>`
     : displayRows.map((row, i) => `<tr>
         <td class="row-num">${(start + i).toLocaleString()}</td>
         ${row.map(v => `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`).join('')}
@@ -515,10 +626,10 @@ function renderTable(d) {
   const pager  = `
     <div id="pager" class="d-flex justify-content-between align-items-center">
       <span class="text-muted" style="font-size:.8rem">
-        Showing ${start.toLocaleString()} – ${end.toLocaleString()} of ${totalRows.toLocaleString()} rows
+        ${t('showing')} ${start.toLocaleString()} – ${end.toLocaleString()} ${t('of')} ${totalRows.toLocaleString()} ${t('rows')}
       </span>
       <div class="d-flex align-items-center gap-2">
-        <label class="text-muted mb-0" style="font-size:.8rem">Rows per page</label>
+        <label class="text-muted mb-0" style="font-size:.8rem">${t('rowsPerPage')}</label>
         <select class="form-select form-select-sm" style="width:80px"
                 aria-label="Rows per page"
                 onchange="changeSize(+this.value)">
@@ -544,15 +655,11 @@ function renderTable(d) {
       </nav>
     </div>`;
 
-  document.getElementById('content-inner').innerHTML = `
-    ${headerHtml}
-    <div id="table-scroll">
-      <table class="table table-sm table-hover data-tbl">
-        <thead>${thead}</thead>
-        <tbody>${tbody}</tbody>
-      </table>
-    </div>
-    ${pager}`;
+  document.getElementById('content-inner').innerHTML =
+    headerHtml +
+    '<div id="table-scroll"><table class="table table-sm table-hover data-tbl">' +
+    '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>' +
+    pager;
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
@@ -618,7 +725,7 @@ function exportCsv() {
   const cols = state.lastColumns;
   const rows = state.lastRows;
   if (!state.table || !cols || !rows || rows.length === 0) {
-    showErr('Nothing to export — load a table first.');
+    showErr(t('errNothingExport'));
     return;
   }
 
@@ -673,14 +780,12 @@ function exportJson() {
 // ── Misc ───────────────────────────────────────────────────────────────────────
 function resetContent() {
   document.getElementById('content-inner').innerHTML =
-    `<div class="state-box"><div class="icon">📊</div><div>Select a table from the list</div></div>`;
+    '<div class="state-box"><div class="icon">📊</div><div>' + esc(t('selectTable')) + '</div></div>';
 }
 
 function spinner(msg) {
-  return `<div class="state-box">
-    <div class="spinner-border text-primary" style="width:1.8rem;height:1.8rem"></div>
-    <div class="text-muted">${esc(msg)}</div>
-  </div>`;
+  return '<div class="state-box"><div class="spinner-border text-primary" style="width:1.8rem;height:1.8rem"></div>' +
+    '<div class="text-muted">' + esc(msg) + '</div></div>';
 }
 
 function showErr(msg) {
@@ -722,8 +827,7 @@ async function openBrowseModal() {
 async function browseTo(path) {
   const listEl = document.getElementById('browse-list');
   const pathEl = document.getElementById('browse-current-path');
-  listEl.innerHTML = `<div class="p-3 text-center text-muted">
-    <div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading…</div>`;
+  listEl.innerHTML = '<div class="p-3 text-center text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>' + t('loadingTables') + '</div>';
 
   try {
     const d = await apiFetch('/api/fs/browse?path=' + enc(path));
@@ -733,26 +837,26 @@ async function browseTo(path) {
     let html = '';
 
     if (d.parent !== null) {
-      html += `<div class="browse-item browse-up" onclick="browseTo('${attr(d.parent)}')">
-        <span class="browse-icon">📁</span>
-        <span class="browse-name fw-semibold">..</span>
-        <span class="text-muted ms-2" style="font-size:.78rem">parent directory</span>
-      </div>`;
+      html += '<div class="browse-item browse-up" onclick="browseTo(\'' + attr(d.parent) + '\')">' +
+        '<span class="browse-icon">📁</span>' +
+        '<span class="browse-name fw-semibold">..</span>' +
+        '<span class="text-muted ms-2" style="font-size:.78rem">' + t('parentDirectory') + '</span>' +
+        '</div>';
     }
 
     if (d.dirs.length === 0) {
-      html += `<div class="p-3 text-center text-muted" style="font-size:.85rem">No subdirectories</div>`;
+      html += '<div class="p-3 text-center text-muted" style="font-size:.85rem">' + t('noSubdirs') + '</div>';
     } else {
-      html += d.dirs.map(entry => `
-        <div class="browse-item" onclick="browseTo('${attr(entry.path)}')">
-          <span class="browse-icon">📁</span>
-          <span class="browse-name">${esc(entry.name)}</span>
-        </div>`).join('');
+      html += d.dirs.map(entry =>
+        '<div class="browse-item" onclick="browseTo(\'' + attr(entry.path) + '\')">' +
+        '<span class="browse-icon">📁</span>' +
+        '<span class="browse-name">' + esc(entry.name) + '</span>' +
+        '</div>').join('');
     }
 
     listEl.innerHTML = html;
   } catch (e) {
-    listEl.innerHTML = `<div class="p-3 text-danger">${esc(e.message)}</div>`;
+    listEl.innerHTML = '<div class="p-3 text-danger">' + esc(e.message) + '</div>';
     pathEl.textContent = path;
   }
 }
