@@ -110,6 +110,16 @@
         <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0 1 15 5.5v.64c.57.265.94.876.856 1.546l-.64 5.124A2.5 2.5 0 0 1 12.733 15H3.266a2.5 2.5 0 0 1-2.481-2.19l-.64-5.124A1.5 1.5 0 0 1 1 6.14zm2 6a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5zm0-3a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5z"/>
       </svg>
     </button>
+    <button id="recent-paths-toggle" type="button"
+            class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+            data-bs-toggle="dropdown" aria-expanded="false"
+            title="Recently used paths">
+      <span class="visually-hidden">Recent paths</span>
+    </button>
+    <ul id="recent-paths-menu" class="dropdown-menu dropdown-menu-end"
+        aria-labelledby="recent-paths-toggle">
+      <li><span class="dropdown-item disabled">No recent paths</span></li>
+    </ul>
     <button class="btn btn-primary px-3" onclick="loadTables()">Load Tables</button>
   </div>
 </div>
@@ -191,7 +201,55 @@ let state = {
 document.getElementById('lake-path').addEventListener('keydown', e => {
   if (e.key === 'Enter') loadTables();
 });
+// Repopulate the recent-paths menu just before it opens, so it always reflects
+// the latest localStorage state (including changes from another tab).
+document.getElementById('recent-paths-toggle')
+  .addEventListener('show.bs.dropdown', renderRecentPathsMenu);
+renderRecentPathsMenu();
 checkStatus();
+
+// ── Recent lake paths (persisted) ─────────────────────────────────────────────
+const RECENT_PATHS_LS_KEY = 'mylake.recentPaths';
+const RECENT_PATHS_MAX    = 5;
+
+function loadRecentPaths() {
+  try {
+    const raw = localStorage.getItem(RECENT_PATHS_LS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(p => typeof p === 'string') : [];
+  } catch { return []; }
+}
+
+function saveRecentPaths(list) {
+  try { localStorage.setItem(RECENT_PATHS_LS_KEY, JSON.stringify(list)); }
+  catch { /* localStorage unavailable */ }
+}
+
+function pushRecentPath(path) {
+  if (!path) return;
+  const current = loadRecentPaths().filter(p => p !== path);
+  current.unshift(path);
+  saveRecentPaths(current.slice(0, RECENT_PATHS_MAX));
+}
+
+function renderRecentPathsMenu() {
+  const menu = document.getElementById('recent-paths-menu');
+  const paths = loadRecentPaths();
+  if (paths.length === 0) {
+    menu.innerHTML = `<li><span class="dropdown-item disabled">No recent paths</span></li>`;
+    return;
+  }
+  menu.innerHTML = paths.map(p => `
+    <li><a class="dropdown-item" href="#" title="${attr(p)}"
+           onclick="useRecentPath('${attr(p)}');return false">${esc(p)}</a></li>`
+  ).join('');
+}
+
+function useRecentPath(path) {
+  document.getElementById('lake-path').value = path;
+  loadTables();
+}
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 async function apiFetch(url) {
@@ -233,6 +291,8 @@ async function loadTables() {
 
   try {
     const d = await apiFetch('/api/tables?path=' + enc(path));
+    // Successful response — remember this path even if the lake has no tables yet.
+    pushRecentPath(path);
     if (d.tables.length === 0) {
       list.innerHTML = `<div class="state-box"><div class="icon">📭</div><div>No Delta tables found</div></div>`;
       return;
