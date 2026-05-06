@@ -1,4 +1,5 @@
 MyLake for your local (Delta) lakes
 
 User documentation lives in the docs/ directory:
+  - docs/browsing.md  — navigating tables and choosing rows per page
   - docs/exporting.md — exporting the current page to CSV

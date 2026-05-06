@@ -42,10 +42,10 @@ will be `orders-page3.csv`.
 
 ## Tips
 
-- **Want more rows in one file?** Bump the **Per page** selector (top-right of
-  the toolbar) up to 200 before clicking **Export CSV**. The export always
-  matches the page that is currently rendered, so a larger page produces a
-  larger file.
+- **Want more rows in one file?** Use the **Rows per page** selector in the
+  pager bar (see [Browsing tables](browsing.md)) to increase the page size up
+  to 500 before clicking **Export CSV**. The export always matches the page
+  that is currently rendered, so a larger page produces a larger file.
 - **Spreadsheet quirks.** The file is plain UTF-8 without a byte-order mark.
   Most modern spreadsheet applications import it cleanly; if yours mangles
   non-ASCII characters, look for an "Import CSV" / "From Text" option that
@@ -59,3 +59,4 @@ will be `orders-page3.csv`.
   request and discussion.
 - Issue [#6](https://github.com/IUSR/mylake/issues/6) — the documentation
   ticket that produced this page.
+- [Browsing tables](browsing.md) — rows-per-page selector and pagination.
