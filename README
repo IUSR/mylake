@@ -1,1 +1,4 @@
 MyLake for your local (Delta) lakes
+
+User documentation lives in the docs/ directory:
+  - docs/exporting.md — exporting the current page to CSV
