@@ -187,12 +187,32 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// ── Page-size preference (persisted) ──────────────────────────────────────────
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
+const PAGE_SIZE_DEFAULT = 50;
+const PAGE_SIZE_MAX     = 1000; // backend hard cap
+const PAGE_SIZE_LS_KEY  = 'mylake.pageSize';
+
+function loadPageSize() {
+  try {
+    const raw = localStorage.getItem(PAGE_SIZE_LS_KEY);
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return Math.min(n, PAGE_SIZE_MAX);
+  } catch { /* localStorage unavailable */ }
+  return PAGE_SIZE_DEFAULT;
+}
+
+function savePageSize(n) {
+  try { localStorage.setItem(PAGE_SIZE_LS_KEY, String(n)); }
+  catch { /* localStorage unavailable */ }
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let state = {
   lakePath: '',
   table: '',
   page: 0,
-  pageSize: 50,
+  pageSize: loadPageSize(),
   totalPages: 0,
   totalRows: 0,
   // Cached from the last /api/table/data response for client-side actions like CSV export.
@@ -378,11 +398,22 @@ function renderTable(d) {
 
   // Pagination
   const pages  = buildPages(page, totalPages);
+  const sizeOpts = PAGE_SIZE_OPTIONS
+    .map(n => `<option value="${n}"${n===pageSize?' selected':''}>${n}</option>`)
+    .join('');
   const pager  = `
     <div id="pager" class="d-flex justify-content-between align-items-center">
       <span class="text-muted" style="font-size:.8rem">
         Showing ${start.toLocaleString()} – ${end.toLocaleString()} of ${totalRows.toLocaleString()} rows
       </span>
+      <div class="d-flex align-items-center gap-2">
+        <label class="text-muted mb-0" style="font-size:.8rem">Rows per page</label>
+        <select class="form-select form-select-sm" style="width:80px"
+                aria-label="Rows per page"
+                onchange="changeSize(+this.value)">
+          ${sizeOpts}
+        </select>
+      </div>
       <nav aria-label="Pagination">
         <ul class="pagination pagination-sm mb-0">
           <li class="page-item ${page===0?'disabled':''}">
@@ -434,8 +465,11 @@ async function goPage(p) {
 }
 
 async function changeSize(n) {
-  state.pageSize = n;
+  // Clamp to backend max (1000) defensively, even though the UI options stay below it.
+  const size = Math.min(Math.max(1, n | 0), PAGE_SIZE_MAX);
+  state.pageSize = size;
   state.page = 0;
+  savePageSize(size);
   await loadData();
 }
 
