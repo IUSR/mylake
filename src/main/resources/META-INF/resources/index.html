@@ -573,6 +573,7 @@ async function selectTable(name) {
   state.table = name;
   state.page = 0;
   state.sortState = null;  // clear sort when switching tables
+  state.filterText = '';  // clear filter when switching tables
   await loadData();
 }
 
@@ -610,6 +611,11 @@ function renderTable(d) {
               onclick="toggleSchemaPanel()"
               title="View table schema">
         Schema
+      </button>
+      <button class="btn btn-sm btn-outline-secondary"
+              onclick="toggleFilterBar()"
+              title="Filter rows">
+        🔍 Filter
       </button>
       <button class="btn btn-sm btn-outline-secondary"
               onclick="exportCsv()"
@@ -652,6 +658,25 @@ function renderTable(d) {
     });
   }
 
+  // Apply client-side filter if active
+  const needle = (state.filterText || '').toLowerCase();
+  const filteredRows = needle
+    ? displayRows.filter(row => row.some(v => v !== null && String(v).toLowerCase().includes(needle)))
+    : displayRows;
+
+  // Filter bar
+  const filterBar = `
+    <div id="filter-bar" class="${needle ? 'visible' : ''}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="#6c757d" viewBox="0 0 16 16">
+        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/>
+      </svg>
+      <input id="filter-input" class="form-control form-control-sm" type="search"
+             placeholder="Filter rows…" value="${esc(state.filterText)}"
+             oninput="applyFilter(this.value)" autocomplete="off">
+      <span id="filter-count" class="filter-count">${needle ? filteredRows.length + ' match' + (filteredRows.length===1?'':'es') : ''}</span>
+      ${needle ? `<button class="btn btn-sm btn-outline-secondary px-2" onclick="clearFilter()" title="Clear filter">✕</button>` : ''}
+    </div>`;
+
   // Table
   const thead = `<tr>
     <th class="row-num">#</th>
@@ -665,9 +690,9 @@ function renderTable(d) {
     }).join('')}
   </tr>`;
 
-  const tbody = displayRows.length === 0
-    ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">${t('noData')}</td></tr>`
-    : displayRows.map((row, i) => `<tr>
+  const tbody = filteredRows.length === 0
+    ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">${needle ? 'No rows match the filter' : t('noData')}</td></tr>`
+    : filteredRows.map((row, i) => `<tr>
         <td class="row-num">${(start + i).toLocaleString()}</td>
         ${row.map(v => `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`).join('')}
       </tr>`).join('');
@@ -709,11 +734,16 @@ function renderTable(d) {
       </nav>
     </div>`;
 
-  document.getElementById('content-inner').innerHTML =
-    headerHtml +
-    '<div id="table-scroll"><table class="table table-sm table-hover data-tbl">' +
-    '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>' +
-    pager;
+  document.getElementById('content-inner').innerHTML = `
+    ${headerHtml}
+    ${filterBar}
+    <div id="table-scroll">
+      <table class="table table-sm table-hover data-tbl">
+        <thead>${thead}</thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>
+    ${pager}`;
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
@@ -855,6 +885,38 @@ function openSchemaPanel() {
 
 function closeSchemaPanel() {
   document.getElementById('schema-panel').classList.remove('open');
+}
+
+// ── Row filter ─────────────────────────────────────────────────────────────────
+function toggleFilterBar() {
+  const bar = document.getElementById('filter-bar');
+  if (!bar) return;
+  const isVisible = bar.classList.contains('visible');
+  if (isVisible) {
+    clearFilter();  // also hides bar
+  } else {
+    bar.classList.add('visible');
+    document.getElementById('filter-input')?.focus();
+  }
+}
+
+function applyFilter(text) {
+  state.filterText = text;
+  if (state.lastColumns && state.lastRows) {
+    renderTable({
+      columns:    state.lastColumns,
+      rows:       state.lastRows,
+      totalRows:  state.totalRows,
+      page:       state.page,
+      pageSize:   state.pageSize,
+      totalPages: state.totalPages,
+    });
+  }
+}
+
+function clearFilter() {
+  state.filterText = '';
+  applyFilter('');
 }
 
 // ── Misc ───────────────────────────────────────────────────────────────────────
