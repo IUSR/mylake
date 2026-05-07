@@ -189,6 +189,8 @@
     <button id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
     <button class="lang-btn active" id="lang-en" onclick="setLang('en')">EN</button>
     <button class="lang-btn" id="lang-zh" onclick="setLang('zh')">中文</button>
+    <button class="btn btn-link p-0 text-secondary" style="font-size:.9rem;line-height:1"
+            onclick="openKbdHelp()" title="Keyboard shortcuts (?)">⌨️</button>
     <span id="status-badge" class="badge bg-secondary px-2 py-1 ms-2">Checking…</span>
   </div>
 </nav>
@@ -277,6 +279,32 @@
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">Cancel</button>
         <button type="button" class="btn btn-sm btn-primary" onclick="confirmBrowse()" data-i18n="selectThisDir">Select This Directory</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard shortcuts help modal -->
+<div class="modal fade" id="kbd-modal" tabindex="-1" aria-labelledby="kbd-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="kbd-modal-label">Keyboard Shortcuts</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td><kbd>/</kbd> or <kbd>Ctrl+F</kbd></td><td>Focus filter / search bar</td></tr>
+            <tr><td><kbd>Ctrl+E</kbd></td><td>Export current page as CSV</td></tr>
+            <tr><td><kbd>Ctrl+J</kbd></td><td>Export current page as JSON</td></tr>
+            <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Previous / next page</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Show this help dialog</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -801,6 +829,66 @@ function exportCsv() {
   // Free the object URL on the next tick (giving the browser time to start the download).
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────────
+function openKbdHelp() {
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('kbd-modal')).show();
+}
+
+document.addEventListener('keydown', e => {
+  // Skip shortcuts when typing in an input/textarea/select
+  const tag = document.activeElement?.tagName?.toLowerCase();
+  const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+  // '?' shows help dialog (not in input)
+  if (!inInput && e.key === '?') {
+    e.preventDefault();
+    openKbdHelp();
+    return;
+  }
+
+  // '/' focuses filter (not in input)
+  if (!inInput && e.key === '/') {
+    e.preventDefault();
+    const filterEl = document.getElementById('filter-input');
+    if (filterEl) { filterEl.focus(); filterEl.select(); }
+    return;
+  }
+
+  // Ctrl+F: focus filter bar (globally, override browser)
+  if (e.ctrlKey && e.key === 'f' && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    const filterEl = document.getElementById('filter-input');
+    if (filterEl) { filterEl.focus(); filterEl.select(); }
+    return;
+  }
+
+  // Ctrl+E: export CSV
+  if (e.ctrlKey && e.key === 'e' && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    exportCsv();
+    return;
+  }
+
+  // Ctrl+J: export JSON
+  if (e.ctrlKey && e.key === 'j' && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    exportJson();
+    return;
+  }
+
+  // Arrow left/right: previous/next page (not in input)
+  if (!inInput && e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (state.page > 0) goPage(state.page - 1);
+    return;
+  }
+  if (!inInput && e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (state.page < state.totalPages - 1) goPage(state.page + 1);
+    return;
+  }
+});
 
 // ── JSON export ────────────────────────────────────────────────────────────────
 // Exports the page currently in memory as an array of row objects.
