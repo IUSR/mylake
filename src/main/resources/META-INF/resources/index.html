@@ -375,6 +375,12 @@ function renderTable(d) {
               title="Download the current page as CSV">
         Export CSV
       </button>
+      <button class="btn btn-sm btn-outline-secondary"
+              onclick="exportJson()"
+              ${rows.length === 0 ? 'disabled' : ''}
+              title="Download the current page as JSON">
+        Export JSON
+      </button>
       <div class="ms-auto d-flex align-items-center gap-2">
         <label class="text-muted mb-0" style="font-size:.8rem">Per page</label>
         <select class="form-select form-select-sm" style="width:75px" onchange="changeSize(+this.value)">
@@ -506,6 +512,35 @@ function exportCsv() {
   a.click();
   a.remove();
   // Free the object URL on the next tick (giving the browser time to start the download).
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// ── JSON export ────────────────────────────────────────────────────────────────
+// Exports the page currently in memory as an array of row objects.
+function exportJson() {
+  const cols = state.lastColumns;
+  const rows = state.lastRows;
+  if (!state.table || !cols || !rows || rows.length === 0) {
+    showErr('Nothing to export — load a table first.');
+    return;
+  }
+
+  const data = rows.map(row => {
+    const obj = {};
+    cols.forEach((c, i) => { obj[c.name] = row[i]; });
+    return obj;
+  });
+
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  const ts   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.download = `${state.table}-page${state.page + 1}-${ts}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
