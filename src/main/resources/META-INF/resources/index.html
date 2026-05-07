@@ -7,7 +7,52 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root { --sidebar-w: 280px; }
-    body { background: #f4f6f9; font-size: 0.9rem; }
+    body { background: #f4f6f9; font-size: 0.9rem; transition: background .2s, color .2s; }
+
+    /* Dark mode */
+    body.dark-mode { background: #1a1c27; color: #d0d5e8; }
+    body.dark-mode .navbar { background: #10121e !important; }
+    body.dark-mode #path-bar { background: #22243a; border-color: #333655; }
+    body.dark-mode #path-bar .input-group-text { background: #22243a !important; color: #9aa5b4; border-color: #333655; }
+    body.dark-mode #path-bar .form-control { background: #22243a; color: #d0d5e8; border-color: #333655; }
+    body.dark-mode #path-bar .form-control::placeholder { color: #6c7a9a; }
+    body.dark-mode #path-bar .btn-outline-secondary { color: #9aa5b4; border-color: #333655; }
+    body.dark-mode #path-bar .btn-outline-secondary:hover { background: #2e3050; }
+    body.dark-mode #sidebar { background: #1e2035; border-color: #333655; }
+    body.dark-mode .sidebar-header { background: #171929; border-color: #333655; color: #8b9ec7; }
+    body.dark-mode .tbl-item { border-color: #2a2d4a; }
+    body.dark-mode .tbl-item:hover { background: #252845; }
+    body.dark-mode .tbl-item.active { background: #1e2d5e; border-color: #4285f4; }
+    body.dark-mode .tbl-name { color: #d0d5e8; }
+    body.dark-mode #content { background: #1e2035; }
+    body.dark-mode #content-header { background: #171929; border-color: #333655; }
+    body.dark-mode #pager { background: #171929; border-color: #333655; }
+    body.dark-mode .data-tbl tbody td { border-color: #2a2d4a; }
+    body.dark-mode .data-tbl tbody tr:hover td { background: #252845; }
+    body.dark-mode #filter-bar { background: #1e2035; border-color: #333655; }
+    body.dark-mode #filter-bar .form-control { background: #22243a; color: #d0d5e8; border-color: #333655; }
+    body.dark-mode .state-box { color: #6c7a9a; }
+    body.dark-mode .toast-container .toast { background: #2a0a0a; }
+    body.dark-mode .modal-content { background: #1e2035; color: #d0d5e8; }
+    body.dark-mode .modal-header { border-color: #333655; }
+    body.dark-mode .modal-footer { border-color: #333655; background: #171929; }
+    body.dark-mode #browse-current-path { background: #171929; border-color: #333655; color: #8b9ec7; }
+    body.dark-mode .browse-item:hover { background: #252845; }
+    body.dark-mode .browse-up { background: #1a1c2f; }
+    body.dark-mode .browse-up:hover { background: #252845; }
+    body.dark-mode .dropdown-menu { background: #22243a; border-color: #333655; }
+    body.dark-mode .dropdown-item { color: #d0d5e8; }
+    body.dark-mode .dropdown-item:hover { background: #2e3050; }
+    body.dark-mode .dropdown-item.disabled { color: #6c7a9a; }
+    body.dark-mode .btn-outline-secondary { color: #9aa5b4; border-color: #555e7a; }
+    body.dark-mode .btn-outline-secondary:hover { background: #2e3050; color: #d0d5e8; }
+    body.dark-mode .text-muted { color: #8b9ec7 !important; }
+
+    /* Dark mode toggle button */
+    #dark-toggle { font-size: .82rem; padding: .2rem .5rem; border-radius: 4px;
+                   cursor: pointer; border: 1px solid #8b9ec7; color: #8b9ec7;
+                   background: transparent; transition: all .15s; line-height: 1.4; }
+    #dark-toggle:hover { border-color: #fff; color: #fff; }
 
     /* Layout */
     #app-layout { display: flex; height: calc(100vh - 110px); overflow: hidden; }
@@ -91,7 +136,10 @@
   <span class="navbar-brand mb-0">
     MyLake <small>Delta Lake Browser</small>
   </span>
-  <span id="status-badge" class="badge bg-secondary px-2 py-1">Checking…</span>
+  <div class="d-flex align-items-center gap-2">
+    <button id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
+    <span id="status-badge" class="badge bg-secondary px-2 py-1">Checking…</span>
+  </div>
 </nav>
 
 <!-- Path bar -->
@@ -229,6 +277,7 @@ document.getElementById('lake-path').addEventListener('keydown', e => {
 document.getElementById('recent-paths-toggle')
   .addEventListener('show.bs.dropdown', renderRecentPathsMenu);
 renderRecentPathsMenu();
+initDarkMode();
 checkStatus();
 
 // ── Recent lake paths (persisted) ─────────────────────────────────────────────
@@ -280,6 +329,30 @@ async function apiFetch(url) {
   const json = await resp.json();
   if (!resp.ok) throw new Error(json.error || `HTTP ${resp.status}`);
   return json;
+}
+
+// ── Dark mode ─────────────────────────────────────────────────────────────────
+const DARK_MODE_LS_KEY = 'mylake.darkMode';
+
+function initDarkMode() {
+  // Respect saved preference, fall back to system preference
+  const saved = localStorage.getItem(DARK_MODE_LS_KEY);
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = saved !== null ? saved === 'true' : prefersDark;
+  setDarkMode(dark, false);  // false = don't save on initial load
+}
+
+function setDarkMode(on, save = true) {
+  document.body.classList.toggle('dark-mode', on);
+  document.getElementById('dark-toggle').textContent = on ? '☀️' : '🌙';
+  if (save) {
+    try { localStorage.setItem(DARK_MODE_LS_KEY, String(on)); }
+    catch { /* localStorage unavailable */ }
+  }
+}
+
+function toggleDarkMode() {
+  setDarkMode(!document.body.classList.contains('dark-mode'));
 }
 
 // ── Status ────────────────────────────────────────────────────────────────────
