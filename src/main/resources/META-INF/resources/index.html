@@ -49,8 +49,13 @@
     .data-tbl       { font-size: .82rem; margin: 0; }
     .data-tbl thead th { position: sticky; top: 0; background: #1a1f36; color: #fff;
                          white-space: nowrap; border: none; padding: .45rem .6rem; }
+    .data-tbl thead th.sortable { cursor: pointer; user-select: none; }
+    .data-tbl thead th.sortable:hover { background: #252b45; }
     .data-tbl thead th .col-type { font-size: .68rem; font-weight: 400; color: #8b9ec7;
                                     display: block; margin-top: 1px; }
+    .data-tbl thead th .sort-icon { font-size: .7rem; margin-left: .3rem; opacity: .5; }
+    .data-tbl thead th.sort-asc  .sort-icon,
+    .data-tbl thead th.sort-desc .sort-icon { opacity: 1; color: #a8d8ff; }
     .data-tbl tbody td { white-space: nowrap; max-width: 280px; overflow: hidden;
                          text-overflow: ellipsis; padding: .32rem .6rem;
                          border-color: #f0f0f0; vertical-align: middle; }
@@ -218,6 +223,8 @@ let state = {
   // Cached from the last /api/table/data response for client-side actions like CSV export.
   lastColumns: null,
   lastRows: null,
+  // Client-side sort state: { colIdx: number, dir: 'asc'|'desc' } or null
+  sortState: null,
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -336,6 +343,7 @@ async function selectTable(name) {
     el.classList.toggle('active', el.dataset.name === name));
   state.table = name;
   state.page = 0;
+  state.sortState = null;  // clear sort when switching tables
   await loadData();
 }
 
@@ -383,15 +391,39 @@ function renderTable(d) {
       </div>
     </div>`;
 
+  // Apply client-side sort if active
+  let displayRows = rows;
+  if (state.sortState !== null) {
+    const { colIdx, dir } = state.sortState;
+    displayRows = [...rows].sort((a, b) => {
+      const av = a[colIdx], bv = b[colIdx];
+      // nulls last
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      // numeric comparison if both parse as numbers
+      const an = Number(av), bn = Number(bv);
+      const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : String(av).localeCompare(String(bv));
+      return dir === 'asc' ? cmp : -cmp;
+    });
+  }
+
   // Table
   const thead = `<tr>
     <th class="row-num">#</th>
-    ${columns.map(c => `<th>${esc(c.name)}<span class="col-type">${esc(c.type)}</span></th>`).join('')}
+    ${columns.map((c, i) => {
+      const isSorted = state.sortState !== null && state.sortState.colIdx === i;
+      const sortCls  = isSorted ? ` sort-${state.sortState.dir}` : '';
+      const icon     = isSorted ? (state.sortState.dir === 'asc' ? '▲' : '▼') : '⇕';
+      return `<th class="sortable${sortCls}" onclick="sortBy(${i})">` +
+        `${esc(c.name)}<span class="sort-icon">${icon}</span>` +
+        `<span class="col-type">${esc(c.type)}</span></th>`;
+    }).join('')}
   </tr>`;
 
-  const tbody = rows.length === 0
+  const tbody = displayRows.length === 0
     ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">(no data)</td></tr>`
-    : rows.map((row, i) => `<tr>
+    : displayRows.map((row, i) => `<tr>
         <td class="row-num">${(start + i).toLocaleString()}</td>
         ${row.map(v => `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`).join('')}
       </tr>`).join('');
@@ -442,6 +474,27 @@ function renderTable(d) {
       </table>
     </div>
     ${pager}`;
+}
+
+// ── Column sort ────────────────────────────────────────────────────────────────
+function sortBy(colIdx) {
+  if (state.sortState !== null && state.sortState.colIdx === colIdx) {
+    // Toggle direction
+    state.sortState.dir = state.sortState.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.sortState = { colIdx, dir: 'asc' };
+  }
+  // Re-render with current cached data (no API call needed)
+  if (state.lastColumns && state.lastRows) {
+    renderTable({
+      columns:    state.lastColumns,
+      rows:       state.lastRows,
+      totalRows:  state.totalRows,
+      page:       state.page,
+      pageSize:   state.pageSize,
+      totalPages: state.totalPages,
+    });
+  }
 }
 
 // ── Pagination helpers ─────────────────────────────────────────────────────────
