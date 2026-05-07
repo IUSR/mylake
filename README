@@ -4,3 +4,4 @@ User documentation lives in the docs/ directory:
   - docs/lake-paths.md  — opening a lake and recent-paths history
   - docs/browsing.md    — navigating tables and choosing rows per page
   - docs/exporting.md   — exporting the current page to CSV
+  - docs/language.md    — switching the display language (EN / 中文)
