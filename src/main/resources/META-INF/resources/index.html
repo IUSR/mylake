@@ -45,6 +45,11 @@
     body.dark-mode .dropdown-item:hover { background: #2e3050; }
     body.dark-mode .dropdown-item.disabled { color: #6c7a9a; }
     body.dark-mode .btn-outline-secondary { color: #9aa5b4; border-color: #555e7a; }
+    body.dark-mode #sql-editor-panel { background: #1e2035; border-color: #333655; }
+    body.dark-mode #sql-editor-panel textarea { background: #22243a; color: #d0d5e8; border-color: #333655; }
+    body.dark-mode #sql-results-container { background: #1e2035; }
+    body.dark-mode .sql-result-tbl thead th { background: #171929; color: #8b9ec7; border-color: #333655; }
+    body.dark-mode .sql-result-tbl tbody td { border-color: #2a2d4a; }
     body.dark-mode .btn-outline-secondary:hover { background: #2e3050; color: #d0d5e8; }
     body.dark-mode .text-muted { color: #8b9ec7 !important; }
 
@@ -119,6 +124,20 @@
 
     /* Toast */
     .toast-container { z-index: 9999; }
+
+
+    /* Inline SQL editor */
+    #sql-editor-panel { background: #fff; border-top: 1px solid #dee2e6; flex-shrink: 0; }
+    #sql-editor-header { padding: .35rem .85rem; background: #fafbfc; border-bottom: 1px solid #eee;
+                         display: flex; align-items: center; gap: .5rem; user-select: none; }
+    #sql-editor-body { padding: .5rem .85rem; }
+    #sql-editor-body textarea { font-family: monospace; font-size: .82rem; resize: vertical; }
+    #sql-results-container { overflow-x: auto; max-height: 220px; overflow-y: auto; }
+    .sql-result-tbl { font-size: .78rem; margin: 0; width: 100%; }
+    .sql-result-tbl thead th { position: sticky; top: 0; background: #f1f3f6; color: #495057;
+                                white-space: nowrap; padding: .3rem .6rem; border-bottom: 1px solid #dee2e6; }
+    .sql-result-tbl tbody td { white-space: nowrap; padding: .25rem .6rem; border-color: #f0f0f0;
+                                max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 
     /* Directory browser modal */
     #browse-current-path { font-family: monospace; font-size: .82rem; padding: .5rem .75rem;
@@ -462,6 +481,10 @@ function renderTable(d) {
               title="Download the current page as JSON">
         Export JSON
       </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="toggleSqlEditor()"
+              title="Open inline SQL query editor">
+        SQL Editor
+      </button>
       <div class="ms-auto d-flex align-items-center gap-2">
         <label class="text-muted mb-0" style="font-size:.8rem">Per page</label>
         <select class="form-select form-select-sm" style="width:75px" onchange="changeSize(+this.value)">
@@ -697,6 +720,84 @@ function attr(s) {
   return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function enc(s) { return encodeURIComponent(s); }
+
+
+// ── Inline SQL editor ──────────────────────────────────────────────────────────
+let sqlEditorVisible = false;
+
+function toggleSqlEditor() {
+  const panel = document.getElementById('sql-editor-panel');
+  if (!panel) return;
+  sqlEditorVisible = !sqlEditorVisible;
+  panel.style.display = sqlEditorVisible ? 'block' : 'none';
+  if (sqlEditorVisible) {
+    const inp = document.getElementById('sql-input');
+    if (inp && !inp.value.trim()) {
+      inp.value = `SELECT * FROM tbl LIMIT 100`;
+    }
+    inp?.focus();
+  }
+}
+
+async function runSql() {
+  const sql = document.getElementById('sql-input')?.value?.trim();
+  if (!sql) return;
+  const container = document.getElementById('sql-results-container');
+  const rowCount  = document.getElementById('sql-row-count');
+  if (container) container.innerHTML = '<div class="text-muted p-2" style="font-size:.82rem">Running…</div>';
+  if (rowCount)  rowCount.textContent = '';
+
+  try {
+    const resp = await fetch('/api/table/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: state.lakePath + '/' + state.table, sql })
+    });
+    const d = await resp.json();
+    if (!resp.ok) throw new Error(d.error || `HTTP ${resp.status}`);
+    if (rowCount) rowCount.textContent = `${d.rowCount.toLocaleString()} row${d.rowCount !== 1 ? 's' : ''} returned`;
+    renderSqlResults(d.columns, d.rows);
+  } catch (e) {
+    if (container) container.innerHTML = `<div class="text-danger p-2" style="font-size:.82rem">${esc(e.message)}</div>`;
+  }
+}
+
+function renderSqlResults(cols, rows) {
+  const container = document.getElementById('sql-results-container');
+  if (!container) return;
+  if (!cols || cols.length === 0) {
+    container.innerHTML = '<div class="text-muted p-2" style="font-size:.82rem">No columns returned.</div>';
+    return;
+  }
+  const thead = `<tr>${cols.map(c => `<th title="${attr(c.type)}">${esc(c.name)}<br><span style="font-size:.65rem;font-weight:400;color:#9aa5b4">${esc(c.type)}</span></th>`).join('')}</tr>`;
+  const tbody = rows.length === 0
+    ? `<tr><td colspan="${cols.length}" class="text-center text-muted py-2">(no rows)</td></tr>`
+    : rows.map(row => `<tr>${row.map(v => `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`).join('')}</tr>`).join('');
+  container.innerHTML = `<table class="sql-result-tbl table table-sm table-hover">
+    <thead>${thead}</thead>
+    <tbody>${tbody}</tbody>
+  </table>`;
+}
+
+function clearSql() {
+  const inp = document.getElementById('sql-input');
+  if (inp) inp.value = '';
+  const container = document.getElementById('sql-results-container');
+  if (container) container.innerHTML = '';
+  const rowCount = document.getElementById('sql-row-count');
+  if (rowCount) rowCount.textContent = '';
+}
+
+// Allow Ctrl+Enter to run the query
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl.id === 'sql-input') {
+      e.preventDefault();
+      runSql();
+    }
+  }
+});
 
 // ── Directory browser ──────────────────────────────────────────────────────────
 let browseCurrentPath = '';

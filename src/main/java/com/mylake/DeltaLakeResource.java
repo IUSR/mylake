@@ -83,6 +83,28 @@ public class DeltaLakeResource {
         }
     }
 
+
+    @POST
+    @Path("/table/query")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response runQuery(Map<String, String> body) {
+        String path = body.get("path");
+        String sql  = body.get("sql");
+
+        if (path == null || path.isBlank()) return bad("missing 'path' field");
+        if (sql  == null || sql.isBlank())  return bad("missing 'sql' field");
+
+        try {
+            Map<String, Object> result = svc.runQuery(path, sql);
+            return Response.ok(result).build();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return bad(e.getMessage());
+        } catch (Exception e) {
+            LOG.errorf("runQuery error: %s", e.getMessage());
+            return err(e.getMessage());
+        }
+    }
+
     @GET
     @Path("/fs/cwd")
     public Map<String, String> cwd() {
