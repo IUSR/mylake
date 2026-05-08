@@ -9,25 +9,12 @@ lot of mouse travel.
 Press **?** at any time to open a shortcuts help overlay in the app. The table
 below lists all available shortcuts:
 
-### Navigation
-
-| Shortcut         | Action                                          |
-| ---------------- | ----------------------------------------------- |
-| `→` / `←`       | Move focus one cell right / left                |
-| `↑` / `↓`       | Move focus one cell up / down                   |
-| `Tab`            | Move focus to the next cell (wraps to next row) |
-| `Shift+Tab`      | Move focus to the previous cell                 |
-| `Home`           | Jump to the first cell in the current row       |
-| `End`            | Jump to the last cell in the current row        |
-| `Ctrl+Home`      | Jump to the first cell of the first row         |
-| `Ctrl+End`       | Jump to the last cell of the last row           |
-
 ### Paging
 
 | Shortcut         | Action                                          |
 | ---------------- | ----------------------------------------------- |
-| `Alt+→`          | Go to the next page                             |
-| `Alt+←`          | Go to the previous page                         |
+| `→`              | Go to the next page                             |
+| `←`              | Go to the previous page                         |
 
 ### Search and filter
 
@@ -35,7 +22,6 @@ below lists all available shortcuts:
 | ---------------- | ----------------------------------------------- |
 | `/`              | Focus the **Filter rows** search input          |
 | `Ctrl+F`         | Focus the **Filter rows** search input          |
-| `Escape`         | Clear the filter and return focus to the table  |
 
 ### Exporting
 
