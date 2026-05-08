@@ -8,6 +8,8 @@ import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 
 @ApplicationScoped
@@ -194,6 +197,76 @@ public class DeltaLakeService {
         result.put("columns", columns);
         result.put("rows", rows);
         result.put("rowCount", rows.size());
+        return result;
+    }
+
+    /**
+     * Reads the Delta _delta_log to extract table UUID, partition columns,
+     * protocol version, and table configuration properties.
+     */
+    public Map<String, Object> tableProperties(String tablePath) throws IOException {
+        Path logDir = Path.of(tablePath, "_delta_log");
+        if (!Files.isDirectory(logDir)) {
+            throw new IllegalArgumentException("No _delta_log directory found at: " + tablePath);
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        // Defaults
+        result.put("id", null);
+        result.put("name", null);
+        result.put("description", null);
+        result.put("partitionColumns", List.of());
+        result.put("readerVersion", null);
+        result.put("writerVersion", null);
+        result.put("configuration", Map.of());
+
+        // Read JSON log files in order; latest values win
+        try (Stream<Path> files = Files.list(logDir)) {
+            List<Path> jsonFiles = files
+                .filter(p -> p.getFileName().toString().endsWith(".json"))
+                .sorted()
+                .toList();
+
+            for (Path logFile : jsonFiles) {
+                List<String> lines = Files.readAllLines(logFile);
+                for (String line : lines) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+                    try {
+                        JsonNode root = mapper.readTree(line);
+
+                        // protocol action
+                        if (root.has("protocol")) {
+                            JsonNode p = root.get("protocol");
+                            if (p.has("minReaderVersion")) result.put("readerVersion", p.get("minReaderVersion").asInt());
+                            if (p.has("minWriterVersion")) result.put("writerVersion", p.get("minWriterVersion").asInt());
+                        }
+
+                        // metaData action
+                        if (root.has("metaData")) {
+                            JsonNode m = root.get("metaData");
+                            if (m.has("id"))          result.put("id", m.get("id").asText());
+                            if (m.has("name") && !m.get("name").isNull()) result.put("name", m.get("name").asText());
+                            if (m.has("description") && !m.get("description").isNull()) result.put("description", m.get("description").asText());
+                            if (m.has("partitionColumns")) {
+                                List<String> parts = new ArrayList<>();
+                                m.get("partitionColumns").forEach(n -> parts.add(n.asText()));
+                                result.put("partitionColumns", parts);
+                            }
+                            if (m.has("configuration")) {
+                                Map<String, String> config = new TreeMap<>();
+                                m.get("configuration").fields().forEachRemaining(e -> config.put(e.getKey(), e.getValue().asText()));
+                                result.put("configuration", config);
+                            }
+                        }
+                    } catch (Exception ignored) {
+                        // Skip malformed lines
+                    }
+                }
+            }
+        }
         return result;
     }
 }

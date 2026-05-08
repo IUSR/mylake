@@ -50,6 +50,12 @@
     body.dark-mode #sql-results-container { background: #1e2035; }
     body.dark-mode .sql-result-tbl thead th { background: #171929; color: #8b9ec7; border-color: #333655; }
     body.dark-mode .sql-result-tbl tbody td { border-color: #2a2d4a; }
+    body.dark-mode #table-props-modal .modal-content { background: #1e2035; color: #d0d5e8; }
+    body.dark-mode #table-props-modal .modal-header { border-color: #333655; }
+    body.dark-mode #table-props-modal .modal-footer { border-color: #333655; background: #171929; }
+    body.dark-mode .props-key { color: #8b9ec7; }
+    body.dark-mode .props-config-tbl th,
+    body.dark-mode .props-config-tbl td { border-color: #2a2d4a; }
     body.dark-mode .btn-outline-secondary:hover { background: #2e3050; color: #d0d5e8; }
     body.dark-mode .text-muted { color: #8b9ec7 !important; }
 
@@ -145,6 +151,12 @@
                                 white-space: nowrap; padding: .3rem .6rem; border-bottom: 1px solid #dee2e6; }
     .sql-result-tbl tbody td { white-space: nowrap; padding: .25rem .6rem; border-color: #f0f0f0;
                                 max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    /* Table properties */
+    .props-key { font-weight: 600; color: #495057; font-size: .83rem; white-space: nowrap; }
+    .props-val { font-family: monospace; font-size: .82rem; word-break: break-all; }
+    .props-config-tbl { font-size: .8rem; width: 100%; }
+    .props-config-tbl th { font-weight: 600; color: #6c757d; padding: .25rem .5rem; border-bottom: 1px solid #dee2e6; }
+    .props-config-tbl td { padding: .22rem .5rem; border-bottom: 1px solid #f5f5f5; }
 
     /* Directory browser modal */
     #browse-current-path { font-family: monospace; font-size: .82rem; padding: .5rem .75rem;
@@ -277,6 +289,24 @@
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">Cancel</button>
         <button type="button" class="btn btn-sm btn-primary" onclick="confirmBrowse()" data-i18n="selectThisDir">Select This Directory</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Table properties modal -->
+<div class="modal fade" id="table-props-modal" tabindex="-1" aria-labelledby="table-props-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="table-props-modal-label">Table Properties</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="table-props-body">
+        <div class="text-center text-muted p-3">Loading…</div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -626,6 +656,9 @@ function renderTable(d) {
       <button class="btn btn-sm btn-outline-secondary" onclick="toggleSqlEditor()"
               title="Open inline SQL query editor">
         SQL Editor
+      <button class="btn btn-sm btn-outline-secondary" onclick="openTablePropsModal()"
+              title="Show Delta table properties">
+        Properties
       </button>
       <div class="ms-auto d-flex align-items-center gap-2">
         <label class="text-muted mb-0" style="font-size:.8rem">${t('perPage')}</label>
@@ -960,6 +993,58 @@ document.addEventListener('keydown', e => {
     }
   }
 });
+
+// ── Table properties modal ─────────────────────────────────────────────────────
+async function openTablePropsModal() {
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('table-props-modal'));
+  const body  = document.getElementById('table-props-body');
+  body.innerHTML = '<div class="text-center text-muted p-3">Loading…</div>';
+  modal.show();
+
+  try {
+    const d = await apiFetch(`/api/table/properties?path=${enc(state.lakePath)}&table=${enc(state.table)}`);
+    renderTableProps(d);
+  } catch (e) {
+    body.innerHTML = `<div class="text-danger p-2">${esc(e.message)}</div>`;
+  }
+}
+
+function renderTableProps(d) {
+  const body = document.getElementById('table-props-body');
+
+  const row = (key, val) => `<tr>
+    <td class="props-key">${esc(key)}</td>
+    <td class="props-val">${val}</td>
+  </tr>`;
+
+  const partCols = Array.isArray(d.partitionColumns) && d.partitionColumns.length > 0
+    ? d.partitionColumns.map(c => `<code>${esc(c)}</code>`).join(', ')
+    : '<span class="text-muted">None (unpartitioned)</span>';
+
+  const configEntries = d.configuration && Object.keys(d.configuration).length > 0
+    ? `<table class="props-config-tbl">
+        <tr><th>Key</th><th>Value</th></tr>
+        ${Object.entries(d.configuration).map(([k, v]) =>
+          `<tr><td><code>${esc(k)}</code></td><td><code>${esc(String(v))}</code></td></tr>`
+        ).join('')}
+      </table>`
+    : '<span class="text-muted">(empty)</span>';
+
+  body.innerHTML = `<table class="table table-sm" style="font-size:.85rem">
+    <tbody>
+      ${row('Table ID (UUID)', d.id ? `<code>${esc(d.id)}</code>` : '<span class="text-muted">—</span>')}
+      ${row('Name', d.name ? esc(d.name) : '<span class="text-muted">—</span>')}
+      ${row('Description', d.description ? esc(d.description) : '<span class="text-muted">—</span>')}
+      ${row('Partition Columns', partCols)}
+      ${row('Reader Version', d.readerVersion != null ? String(d.readerVersion) : '<span class="text-muted">—</span>')}
+      ${row('Writer Version', d.writerVersion != null ? String(d.writerVersion) : '<span class="text-muted">—</span>')}
+      <tr>
+        <td class="props-key" style="vertical-align:top">Table Properties</td>
+        <td class="props-val">${configEntries}</td>
+      </tr>
+    </tbody>
+  </table>`;
+}
 
 // ── Directory browser ──────────────────────────────────────────────────────────
 let browseCurrentPath = '';
