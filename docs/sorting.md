@@ -12,13 +12,13 @@ smallest → largest, earliest → latest).
 Click the **same column header again** to reverse the order (descending).
 Click a **different column header** at any time to switch to that column.
 
-A small arrow indicator on the active column header shows the current sort
-direction:
+A small arrow indicator on each column header shows its sort state:
 
-| Indicator | Meaning                   |
-| --------- | ------------------------- |
-| ↑ (up)    | Ascending (A → Z, 1 → 9)  |
-| ↓ (down)  | Descending (Z → A, 9 → 1) |
+| Indicator | Meaning                                      |
+| --------- | -------------------------------------------- |
+| ⇕         | Column is sortable but not currently sorted  |
+| ▲ (up)    | Ascending (A → Z, 1 → 9)                    |
+| ▼ (down)  | Descending (Z → A, 9 → 1)                   |
 
 ## Scope of sorting
 
@@ -40,11 +40,9 @@ representation — results may not be in the order you expect.
 
 ## Resetting the sort
 
-To remove sorting and return to the original row order, click the active
-(highlighted) column header a third time. The sort indicator disappears and
-rows return to their default order.
-
-Navigating to a different table or reloading the page also resets the sort.
+Sorting toggles between ascending and descending with each click on the active
+column header. To reset the sort, navigate to a different table or reload the
+page — the sort state clears automatically when you switch tables.
 
 ## Related
 
