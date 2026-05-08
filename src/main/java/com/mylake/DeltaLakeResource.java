@@ -2,6 +2,7 @@ package com.mylake;
 
 import com.mylake.model.TableData;
 import com.mylake.model.TableInfo;
+import com.mylake.model.VersionEntry;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -101,6 +102,67 @@ public class DeltaLakeResource {
             return bad(e.getMessage());
         } catch (Exception e) {
             LOG.errorf("runQuery error: %s", e.getMessage());
+            return err(e.getMessage());
+        }
+    }
+
+    @GET
+    @Path("/table/versions")
+    public Response versions(
+            @QueryParam("path") String path,
+            @QueryParam("table") String table) {
+
+        if (path == null || path.isBlank()) return bad("missing 'path' parameter");
+        if (table == null || table.isBlank()) return bad("missing 'table' parameter");
+        if (table.contains("..") || table.contains("/") || table.contains("\\")) {
+            return bad("invalid table name");
+        }
+
+        String tablePath = path.endsWith("/") || path.endsWith("\\")
+            ? path + table
+            : path + "/" + table;
+
+        try {
+            List<VersionEntry> versionList = svc.listVersions(tablePath);
+            return Response.ok(Map.of("versions", versionList)).build();
+        } catch (IllegalArgumentException e) {
+            return bad(e.getMessage());
+        } catch (Exception e) {
+            LOG.errorf("listVersions error for %s: %s", tablePath, e.getMessage());
+            return err(e.getMessage());
+        }
+    }
+
+    @GET
+    @Path("/table/data/version")
+    public Response dataAtVersion(
+            @QueryParam("path") String path,
+            @QueryParam("table") String table,
+            @QueryParam("version") Long version,
+            @QueryParam("page") @DefaultValue("0") int page,
+            @QueryParam("size") @DefaultValue("50") int size) {
+
+        if (path == null || path.isBlank()) return bad("missing 'path' parameter");
+        if (table == null || table.isBlank()) return bad("missing 'table' parameter");
+        if (version == null) return bad("missing 'version' parameter");
+        if (table.contains("..") || table.contains("/") || table.contains("\\")) {
+            return bad("invalid table name");
+        }
+
+        page = Math.max(0, page);
+        size = Math.min(1000, Math.max(1, size));
+
+        String tablePath = path.endsWith("/") || path.endsWith("\\")
+            ? path + table
+            : path + "/" + table;
+
+        try {
+            TableData result = svc.queryAtVersion(tablePath, version, page, size);
+            return Response.ok(result).build();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return bad(e.getMessage());
+        } catch (Exception e) {
+            LOG.errorf("queryAtVersion error for %s@v%d: %s", tablePath, version, e.getMessage());
             return err(e.getMessage());
         }
     }

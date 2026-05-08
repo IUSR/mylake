@@ -189,6 +189,12 @@
     <button id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
     <button class="lang-btn active" id="lang-en" onclick="setLang('en')">EN</button>
     <button class="lang-btn" id="lang-zh" onclick="setLang('zh')">中文</button>
+    <button class="btn btn-link p-0 text-secondary" style="font-size:.9rem;line-height:1"
+            onclick="openKbdHelp()" title="Keyboard shortcuts (?)">&#9000;</button>
+    <button id="history-btn" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.8rem"
+            onclick="toggleVersionPanel()" title="Show version history" disabled>
+      History
+    </button>
     <span id="status-badge" class="badge bg-secondary px-2 py-1 ms-2">Checking…</span>
   </div>
 </nav>
@@ -240,6 +246,11 @@
   <!-- Content area -->
   <div id="content">
     <div id="content-inner" style="display:flex;flex-direction:column;height:100%">
+      <div id="version-banner">
+        <strong>Viewing version <span id="banner-version-num"></span></strong>
+        <span class="text-muted" id="banner-version-ts"></span>
+        <a href="#" class="ms-2" onclick="returnToLatest();return false">Return to latest version</a>
+      </div>
       <div class="state-box">
         <div class="icon">📊</div>
         <div data-i18n="selectTable">Select a table from the list</div>
@@ -252,6 +263,19 @@
         <button class="btn-close" style="font-size:.7rem" onclick="closeSchemaPanel()" aria-label="Close schema"></button>
       </div>
       <div id="schema-list"></div>
+    </div>
+  </div>
+
+  <!-- Version history panel -->
+  <div id="version-panel">
+    <div class="version-panel-header">
+      <span>Version History</span>
+      <button type="button" class="btn-close btn-close-sm" onclick="closeVersionPanel()" aria-label="Close"></button>
+    </div>
+    <div id="version-list">
+      <div class="state-box" style="height:200px">
+        <div class="text-muted" style="font-size:.85rem">Load version history to see commits</div>
+      </div>
     </div>
   </div>
 
@@ -277,6 +301,31 @@
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">Cancel</button>
         <button type="button" class="btn btn-sm btn-primary" onclick="confirmBrowse()" data-i18n="selectThisDir">Select This Directory</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard shortcuts help modal -->
+<div class="modal fade" id="kbd-modal" tabindex="-1" aria-labelledby="kbd-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="kbd-modal-label">Keyboard Shortcuts</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td><kbd>/</kbd> or <kbd>Ctrl+F</kbd></td><td>Focus filter / search bar</td></tr>
+            <tr><td><kbd>Ctrl+H</kbd></td><td>Toggle version history panel</td></tr>
+            <tr><td><kbd>&#8592;</kbd> / <kbd>&#8594;</kbd></td><td>Previous / next page</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Show this help dialog</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -427,6 +476,9 @@ let state = {
   lastRows: null,
   // Client-side sort state: { colIdx: number, dir: 'asc'|'desc' } or null
   sortState: null,
+  // Version history state
+  viewingVersion: null,      // null = latest; number = historical version
+  versionPanelOpen: false,
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -573,15 +625,32 @@ async function selectTable(name) {
   state.table = name;
   state.page = 0;
   state.sortState = null;  // clear sort when switching tables
+  state.viewingVersion = null;
+  hideBanner();
+  // Enable history button
+  const hBtn = document.getElementById('history-btn');
+  if (hBtn) { hBtn.disabled = false; hBtn.textContent = 'History'; }
   await loadData();
 }
 
 async function loadData() {
-  const inner = document.getElementById('content-inner');
-  inner.innerHTML = spinner(t('loadingData'));
+  const innerWrap = document.getElementById('content-inner');
+
+  // Remove old content except the version banner
+  Array.from(innerWrap.children).forEach(child => {
+    if (child.id !== 'version-banner') child.remove();
+  });
+  const tmp = document.createElement('div');
+  tmp.innerHTML = spinner(t('loadingData'));
+  innerWrap.appendChild(tmp.firstElementChild);
 
   try {
-    const url = '/api/table/data?path=' + enc(state.lakePath) + '&table=' + enc(state.table) + '&page=' + state.page + '&size=' + state.pageSize;
+    let url;
+    if (state.viewingVersion !== null) {
+      url = `/api/table/data/version?path=${enc(state.lakePath)}&table=${enc(state.table)}&version=${state.viewingVersion}&page=${state.page}&size=${state.pageSize}`;
+    } else {
+      url = `/api/table/data?path=${enc(state.lakePath)}&table=${enc(state.table)}&page=${state.page}&size=${state.pageSize}`;
+    }
     const d = await apiFetch(url);
     state.totalPages = d.totalPages;
     state.totalRows  = d.totalRows;
@@ -589,7 +658,13 @@ async function loadData() {
     state.lastRows    = d.rows;
     renderTable(d);
   } catch (e) {
-    inner.innerHTML = '<div class="state-box"><div class="icon">⚠️</div><div>' + esc(e.message) + '</div></div>';
+    Array.from(innerWrap.children).forEach(child => {
+      if (child.id !== 'version-banner') child.remove();
+    });
+    const errDiv = document.createElement('div');
+    errDiv.className = 'state-box';
+    errDiv.innerHTML = `<div class="icon">⚠️</div><div>${esc(e.message)}</div>`;
+    innerWrap.appendChild(errDiv);
   }
 }
 
@@ -709,11 +784,24 @@ function renderTable(d) {
       </nav>
     </div>`;
 
-  document.getElementById('content-inner').innerHTML =
-    headerHtml +
-    '<div id="table-scroll"><table class="table table-sm table-hover data-tbl">' +
-    '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>' +
-    pager;
+  const innerWrap = document.getElementById('content-inner');
+
+  // Remove old content except the version banner
+  Array.from(innerWrap.children).forEach(child => {
+    if (child.id !== 'version-banner') child.remove();
+  });
+
+  const newContent = document.createElement('template');
+  newContent.innerHTML = `
+    ${headerHtml}
+    <div id="table-scroll">
+      <table class="table table-sm table-hover data-tbl">
+        <thead>${thead}</thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>
+    ${pager}`;
+  newContent.content.childNodes.forEach(node => innerWrap.appendChild(node.cloneNode(true)));
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
@@ -859,8 +947,19 @@ function closeSchemaPanel() {
 
 // ── Misc ───────────────────────────────────────────────────────────────────────
 function resetContent() {
-  document.getElementById('content-inner').innerHTML =
-    '<div class="state-box"><div class="icon">📊</div><div>' + esc(t('selectTable')) + '</div></div>';
+  state.viewingVersion = null;
+  hideBanner();
+  closeVersionPanel();
+  const hBtn = document.getElementById('history-btn');
+  if (hBtn) { hBtn.disabled = true; hBtn.textContent = 'History'; }
+  const inner = document.getElementById('content-inner');
+  Array.from(inner.children).forEach(child => {
+    if (child.id !== 'version-banner') child.remove();
+  });
+  const ph = document.createElement('div');
+  ph.className = 'state-box';
+  ph.innerHTML = '<div class="icon">📊</div><div>' + esc(t('selectTable')) + '</div>';
+  inner.appendChild(ph);
 }
 
 function spinner(msg) {
@@ -950,16 +1049,151 @@ function clearSql() {
   if (rowCount) rowCount.textContent = '';
 }
 
-// Allow Ctrl+Enter to run the query
+
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────────
+function openKbdHelp() {
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('kbd-modal')).show();
+}
+
 document.addEventListener('keydown', e => {
+  const tag = document.activeElement?.tagName?.toLowerCase();
+  const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+  // Ctrl+Enter in SQL editor runs the query
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-    const activeEl = document.activeElement;
-    if (activeEl && activeEl.id === 'sql-input') {
+    if (document.activeElement?.id === 'sql-input') {
       e.preventDefault();
       runSql();
+      return;
     }
   }
+
+  // '?' shows help
+  if (!inInput && e.key === '?') { e.preventDefault(); openKbdHelp(); return; }
+
+  // Ctrl+H: toggle version history
+  if (e.ctrlKey && e.key === 'h' && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    if (state.table) toggleVersionPanel();
+    return;
+  }
+
+  // Arrow left/right: previous/next page
+  if (!inInput && e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (state.page > 0) goPage(state.page - 1);
+    return;
+  }
+  if (!inInput && e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (state.page < state.totalPages - 1) goPage(state.page + 1);
+    return;
+  }
 });
+
+// ── Version history panel ──────────────────────────────────────────────────────
+
+async function toggleVersionPanel() {
+  if (state.versionPanelOpen) {
+    closeVersionPanel();
+  } else {
+    openVersionPanel();
+  }
+}
+
+async function openVersionPanel() {
+  const panel = document.getElementById('version-panel');
+  panel.classList.add('open');
+  state.versionPanelOpen = true;
+  const btn = document.getElementById('history-btn');
+  if (btn) btn.textContent = 'Latest version';
+  await loadVersionHistory();
+}
+
+function closeVersionPanel() {
+  const panel = document.getElementById('version-panel');
+  panel.classList.remove('open');
+  state.versionPanelOpen = false;
+  const btn = document.getElementById('history-btn');
+  if (btn && state.table) btn.textContent = 'History';
+}
+
+async function loadVersionHistory() {
+  if (!state.table) return;
+  const listEl = document.getElementById('version-list');
+  listEl.innerHTML = spinner('Loading history…');
+
+  try {
+    const url = `/api/table/versions?path=${enc(state.lakePath)}&table=${enc(state.table)}`;
+    const d = await apiFetch(url);
+    if (d.versions.length === 0) {
+      listEl.innerHTML = `<div class="p-3 text-center text-muted" style="font-size:.85rem">No versions found</div>`;
+      return;
+    }
+
+    listEl.innerHTML = d.versions.map(v => {
+      const op = v.operation ? `<div class="ver-op">${esc(v.operation)}</div>` : '';
+      const ts = v.timestamp ? `<div class="ver-ts">${esc(v.timestamp)}</div>` : '';
+      const rows = v.numOutputRows != null ? `<div class="ver-ts">${v.numOutputRows.toLocaleString()} rows out</div>` : '';
+      return `
+        <div class="ver-item${state.viewingVersion === v.version ? ' active' : ''}"
+             data-version="${v.version}"
+             onclick="viewVersion(${v.version}, '${attr(v.timestamp || '')}')">
+          <div class="d-flex justify-content-between align-items-start">
+            <span class="ver-number">v${v.version}</span>
+            ${op}
+          </div>
+          ${ts}
+          ${rows}
+        </div>`;
+    }).join('');
+  } catch (e) {
+    listEl.innerHTML = `<div class="p-3 text-danger">${esc(e.message)}</div>`;
+  }
+}
+
+async function viewVersion(version, timestamp) {
+  state.viewingVersion = version;
+  state.page = 0;
+
+  // Highlight selected version
+  document.querySelectorAll('.ver-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.version, 10) === version);
+  });
+
+  // Show banner
+  showBanner(version, timestamp);
+
+  // Load data at this version
+  await loadData();
+}
+
+async function returnToLatest() {
+  state.viewingVersion = null;
+  state.page = 0;
+  hideBanner();
+
+  // Deselect all version items
+  document.querySelectorAll('.ver-item').forEach(el => el.classList.remove('active'));
+
+  await loadData();
+}
+
+function showBanner(version, timestamp) {
+  const banner = document.getElementById('version-banner');
+  const numEl  = document.getElementById('banner-version-num');
+  const tsEl   = document.getElementById('banner-version-ts');
+  if (!banner) return;
+  numEl.textContent = version;
+  tsEl.textContent  = timestamp ? '— written ' + timestamp : '';
+  banner.classList.add('show');
+}
+
+function hideBanner() {
+  const banner = document.getElementById('version-banner');
+  if (banner) banner.classList.remove('show');
+}
 
 // ── Directory browser ──────────────────────────────────────────────────────────
 let browseCurrentPath = '';
