@@ -16,7 +16,7 @@ and all controls switch to the dark palette. No page reload is required.
 ## Preference persistence
 
 MyLake saves your theme preference in the browser's `localStorage` under the
-key `mylake-theme`. The value is either `"dark"` or `"light"`. This means:
+key `mylake.darkMode`. The value is either `"true"` or `"false"`. This means:
 
 - The theme is restored the next time you open MyLake in the same browser.
 - Your choice is per-browser, not per-account — if you use MyLake in multiple
@@ -35,7 +35,7 @@ Otherwise it defaults to light mode.
 
 | Condition                              | MyLake default |
 | -------------------------------------- | -------------- |
-| `localStorage` has `mylake-theme`      | Uses saved preference |
+| `localStorage` has `mylake.darkMode`   | Uses saved preference |
 | No saved preference, OS in dark mode   | Dark mode      |
 | No saved preference, OS in light mode  | Light mode     |
 
