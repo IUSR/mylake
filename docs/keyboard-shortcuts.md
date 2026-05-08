@@ -23,12 +23,24 @@ below lists all available shortcuts:
 | `/`              | Focus the **Filter rows** search input          |
 | `Ctrl+F`         | Focus the **Filter rows** search input          |
 
+### SQL editor
+
+| Shortcut         | Action                                          |
+| ---------------- | ----------------------------------------------- |
+| `Ctrl+Enter`     | Run the query (when focus is in the SQL editor) |
+
 ### Exporting
 
 | Shortcut         | Action                                          |
 | ---------------- | ----------------------------------------------- |
 | `Ctrl+E`         | Export the current page to CSV                  |
 | `Ctrl+J`         | Export the current page to JSON                 |
+
+### Navigation
+
+| Shortcut         | Action                                          |
+| ---------------- | ----------------------------------------------- |
+| `Ctrl+H`         | Toggle the version history panel                |
 
 ### Other
 
@@ -67,3 +79,5 @@ know about it before this page does.
 - [Filtering rows](filtering.md) — the search bar you can focus with `/`.
 - [Exporting data](exporting.md) — CSV export (`Ctrl+E`).
 - [Exporting data as JSON](json-export.md) — JSON export (`Ctrl+J`).
+- [Inline SQL query editor](sql-editor.md) — SQL editor panel (`Ctrl+Enter`).
+- [Delta table version history](version-history.md) — version history panel (`Ctrl+H`).
