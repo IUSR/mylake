@@ -13,7 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 @ApplicationScoped
@@ -135,5 +137,63 @@ public class DeltaLakeService {
 
         int totalPages = pageSize > 0 ? (int) Math.ceil((double) total / pageSize) : 1;
         return new TableData(cols, rows, total, page, pageSize, totalPages);
+    }
+
+    /**
+     * Runs a user-supplied SELECT query (replacing the placeholder __table__ with
+     * a delta_scan() call) and returns columns + rows.  Only SELECT statements are allowed.
+     */
+    public synchronized Map<String, Object> runQuery(String tablePath, String sql) throws SQLException {
+        if (!ready) {
+            throw new IllegalStateException("Delta extension not ready" + (initError != null ? ": " + initError : ""));
+        }
+        if (tablePath.contains("'") || tablePath.contains(";")) {
+            throw new IllegalArgumentException("Path contains invalid characters");
+        }
+        // Rudimentary guard: only allow SELECT
+        String trimmed = sql.trim();
+        if (!trimmed.toUpperCase().startsWith("SELECT")) {
+            throw new IllegalArgumentException("Only SELECT statements are allowed");
+        }
+
+        String escaped = tablePath.replace("\\", "\\\\");
+        // Replace the placeholder token with a delta_scan reference so users can write
+        // "SELECT … FROM tbl" while tbl is substituted at runtime.
+        String rewritten = trimmed.replaceAll("(?i)\\bFROM\\s+tbl\\b",
+                                              "FROM delta_scan('" + escaped + "')");
+        // If no substitution happened and no delta_scan present, inject FROM clause
+        if (!rewritten.contains("delta_scan")) {
+            rewritten = trimmed;
+        }
+
+        List<Map<String, Object>> columns = new ArrayList<>();
+        List<List<Object>> rows = new ArrayList<>();
+
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery(rewritten)) {
+            ResultSetMetaData meta = rs.getMetaData();
+            int n = meta.getColumnCount();
+            for (int i = 1; i <= n; i++) {
+                Map<String, Object> col = new LinkedHashMap<>();
+                col.put("name", meta.getColumnName(i));
+                col.put("type", meta.getColumnTypeName(i));
+                columns.add(col);
+            }
+            int limit = 1000;
+            while (rs.next() && rows.size() < limit) {
+                List<Object> row = new ArrayList<>(n);
+                for (int i = 1; i <= n; i++) {
+                    Object v = rs.getObject(i);
+                    row.add(v == null ? null : (v instanceof Number || v instanceof Boolean ? v : v.toString()));
+                }
+                rows.add(row);
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("columns", columns);
+        result.put("rows", rows);
+        result.put("rowCount", rows.size());
+        return result;
     }
 }
