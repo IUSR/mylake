@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -195,5 +196,67 @@ public class DeltaLakeService {
         result.put("rows", rows);
         result.put("rowCount", rows.size());
         return result;
+
+    }
+
+    /**
+     * Returns per-column statistics (null count, min, max, distinct count) for a Delta table.
+     */
+    public synchronized List<Map<String, Object>> columnStats(String tablePath) throws SQLException {
+        if (!ready) {
+            throw new IllegalStateException("Delta extension not ready" + (initError != null ? ": " + initError : ""));
+        }
+        if (tablePath.contains("'") || tablePath.contains(";")) {
+            throw new IllegalArgumentException("Path contains invalid characters");
+        }
+
+        String escaped = tablePath.replace("\\", "\\\\");
+        List<Map<String, Object>> stats = new ArrayList<>();
+
+        // First get column names and types
+        List<ColumnInfo> cols = new ArrayList<>();
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery("SELECT * FROM delta_scan('" + escaped + "') LIMIT 0")) {
+            ResultSetMetaData meta = rs.getMetaData();
+            int n = meta.getColumnCount();
+            for (int i = 1; i <= n; i++) {
+                cols.add(new ColumnInfo(meta.getColumnName(i), meta.getColumnTypeName(i)));
+            }
+        }
+
+        if (cols.isEmpty()) return stats;
+
+        // Build aggregate query: for each column get null count, min, max, distinct count
+        StringBuilder sb = new StringBuilder("SELECT ");
+        for (int i = 0; i < cols.size(); i++) {
+            String cname = "\"" + cols.get(i).name().replace("\"", "\\\"") + "\"";
+            if (i > 0) sb.append(", ");
+            sb.append("COUNT(*) - COUNT(").append(cname).append(") AS nc_").append(i);
+            sb.append(", MIN(").append(cname).append(") AS mn_").append(i);
+            sb.append(", MAX(").append(cname).append(") AS mx_").append(i);
+            sb.append(", COUNT(DISTINCT ").append(cname).append(") AS dc_").append(i);
+        }
+        sb.append(" FROM delta_scan('").append(escaped).append("')");
+
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery(sb.toString())) {
+            if (rs.next()) {
+                for (int i = 0; i < cols.size(); i++) {
+                    Map<String, Object> col = new LinkedHashMap<>();
+                    col.put("name", cols.get(i).name());
+                    col.put("type", cols.get(i).type());
+                    Object nullCount = rs.getObject("nc_" + i);
+                    Object minVal = rs.getObject("mn_" + i);
+                    Object maxVal = rs.getObject("mx_" + i);
+                    Object distCount = rs.getObject("dc_" + i);
+                    col.put("nullCount", nullCount == null ? 0 : nullCount);
+                    col.put("min", minVal == null ? null : minVal.toString());
+                    col.put("max", maxVal == null ? null : maxVal.toString());
+                    col.put("distinctCount", distCount == null ? 0 : distCount);
+                    stats.add(col);
+                }
+            }
+        }
+        return stats;
     }
 }

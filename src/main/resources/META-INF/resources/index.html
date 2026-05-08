@@ -50,6 +50,10 @@
     body.dark-mode #sql-results-container { background: #1e2035; }
     body.dark-mode .sql-result-tbl thead th { background: #171929; color: #8b9ec7; border-color: #333655; }
     body.dark-mode .sql-result-tbl tbody td { border-color: #2a2d4a; }
+    body.dark-mode #stats-panel { background: #1e2035; border-color: #333655; color: #d0d5e8; }
+    body.dark-mode .stats-tbl thead th { background: #171929; color: #8b9ec7; border-color: #333655; }
+    body.dark-mode .stats-tbl tbody td { border-color: #2a2d4a; }
+    body.dark-mode .stats-tbl tbody tr:hover td { background: #252845; }
     body.dark-mode .btn-outline-secondary:hover { background: #2e3050; color: #d0d5e8; }
     body.dark-mode .text-muted { color: #8b9ec7 !important; }
 
@@ -145,6 +149,18 @@
                                 white-space: nowrap; padding: .3rem .6rem; border-bottom: 1px solid #dee2e6; }
     .sql-result-tbl tbody td { white-space: nowrap; padding: .25rem .6rem; border-color: #f0f0f0;
                                 max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Column statistics panel */
+    #stats-panel { background: #fff; border-top: 1px solid #dee2e6; flex-shrink: 0; max-height: 240px; overflow-y: auto; }
+    #stats-panel-header { padding: .35rem .85rem; background: #fafbfc; border-bottom: 1px solid #eee;
+                          display: flex; align-items: center; gap: .5rem; cursor: pointer; user-select: none; }
+    #stats-panel-header:hover { background: #f0f5ff; }
+    #stats-panel-body { overflow-x: auto; }
+    .stats-tbl { font-size: .78rem; margin: 0; width: 100%; }
+    .stats-tbl thead th { position: sticky; top: 0; background: #f1f3f6; color: #495057;
+                          white-space: nowrap; padding: .3rem .6rem; border-bottom: 1px solid #dee2e6; }
+    .stats-tbl tbody td { white-space: nowrap; padding: .25rem .6rem; border-color: #f0f0f0; }
+    .stats-null { color: #bbb; font-style: italic; font-size: .75rem; }
 
     /* Directory browser modal */
     #browse-current-path { font-family: monospace; font-size: .82rem; padding: .5rem .75rem;
@@ -573,6 +589,8 @@ async function selectTable(name) {
   state.table = name;
   state.page = 0;
   state.sortState = null;  // clear sort when switching tables
+  statsVisible = false;
+  statsLoaded = false;
   await loadData();
 }
 
@@ -626,6 +644,10 @@ function renderTable(d) {
       <button class="btn btn-sm btn-outline-secondary" onclick="toggleSqlEditor()"
               title="Open inline SQL query editor">
         SQL Editor
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="toggleStatsPanel()"
+              title="Show/hide per-column statistics">
+        Column Stats
       </button>
       <div class="ms-auto d-flex align-items-center gap-2">
         <label class="text-muted mb-0" style="font-size:.8rem">${t('perPage')}</label>
@@ -709,11 +731,22 @@ function renderTable(d) {
       </nav>
     </div>`;
 
-  document.getElementById('content-inner').innerHTML =
-    headerHtml +
-    '<div id="table-scroll"><table class="table table-sm table-hover data-tbl">' +
-    '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>' +
-    pager;
+  document.getElementById('content-inner').innerHTML = `
+    ${headerHtml}
+    <div id="table-scroll" style="flex:1;overflow:auto">
+      <table class="table table-sm table-hover data-tbl">
+        <thead>${thead}</thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>
+    ${pager}
+    <div id="stats-panel" style="display:none">
+      <div id="stats-panel-header" onclick="toggleStatsPanel()">
+        <span style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6c757d">Column Statistics</span>
+        <span id="stats-panel-chevron" style="margin-left:auto;font-size:.75rem;color:#6c757d">▲ hide</span>
+      </div>
+      <div id="stats-panel-body"><div class="p-2 text-muted text-center" style="font-size:.82rem">Loading stats…</div></div>
+    </div>`;
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
@@ -936,6 +969,63 @@ function renderSqlResults(cols, rows) {
     ? `<tr><td colspan="${cols.length}" class="text-center text-muted py-2">(no rows)</td></tr>`
     : rows.map(row => `<tr>${row.map(v => `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`).join('')}</tr>`).join('');
   container.innerHTML = `<table class="sql-result-tbl table table-sm table-hover">
+    <thead>${thead}</thead>
+    <tbody>${tbody}</tbody>
+  </table>`;
+}
+
+// ── Column statistics panel ────────────────────────────────────────────────────
+let statsVisible = false;
+let statsLoaded = false;
+
+function toggleStatsPanel() {
+  const panel = document.getElementById('stats-panel');
+  const chevron = document.getElementById('stats-panel-chevron');
+  if (!panel) return;
+  statsVisible = !statsVisible;
+  panel.style.display = statsVisible ? 'block' : 'none';
+  if (chevron) chevron.textContent = statsVisible ? '▲ hide' : '▼ show';
+  if (statsVisible && !statsLoaded) {
+    loadStats();
+  }
+}
+
+async function loadStats() {
+  const body = document.getElementById('stats-panel-body');
+  if (!body) return;
+  body.innerHTML = '<div class="p-2 text-muted text-center" style="font-size:.82rem">Loading statistics…</div>';
+  try {
+    const d = await apiFetch(`/api/table/stats?path=${enc(state.lakePath)}&table=${enc(state.table)}`);
+    statsLoaded = true;
+    renderStats(d.stats);
+  } catch (e) {
+    body.innerHTML = `<div class="p-2 text-danger" style="font-size:.82rem">${esc(e.message)}</div>`;
+  }
+}
+
+function renderStats(stats) {
+  const body = document.getElementById('stats-panel-body');
+  if (!body || !stats || stats.length === 0) {
+    if (body) body.innerHTML = '<div class="p-2 text-muted text-center" style="font-size:.82rem">No columns</div>';
+    return;
+  }
+  const thead = `<tr>
+    <th>Column</th>
+    <th>Type</th>
+    <th>Null Count</th>
+    <th>Min</th>
+    <th>Max</th>
+    <th>Distinct Count</th>
+  </tr>`;
+  const tbody = stats.map(s => `<tr>
+    <td><strong>${esc(s.name)}</strong></td>
+    <td class="text-muted">${esc(s.type)}</td>
+    <td>${s.nullCount}</td>
+    <td>${s.min === null ? '<span class="stats-null">NULL</span>' : esc(String(s.min))}</td>
+    <td>${s.max === null ? '<span class="stats-null">NULL</span>' : esc(String(s.max))}</td>
+    <td>${s.distinctCount}</td>
+  </tr>`).join('');
+  body.innerHTML = `<table class="stats-tbl table table-sm table-hover">
     <thead>${thead}</thead>
     <tbody>${tbody}</tbody>
   </table>`;
