@@ -117,6 +117,17 @@
                  height: 100%; color: #9aa5b4; gap: .5rem; }
     .state-box .icon { font-size: 2.5rem; }
 
+    /* Column stats panel */
+    #stats-panel { border-top: 1px solid #dee2e6; background: #fafbfc; flex-shrink: 0;
+                   max-height: 220px; overflow-y: auto; }
+    body.dark-mode #stats-panel { background: #171929; border-color: #333655; }
+    #stats-panel table { font-size: .78rem; margin: 0; }
+    #stats-panel thead th { position: sticky; top: 0; background: #e9ecef; font-weight: 600;
+                            padding: .3rem .55rem; border: none; white-space: nowrap; }
+    body.dark-mode #stats-panel thead th { background: #22243a; color: #d0d5e8; }
+    #stats-panel tbody td { padding: .28rem .55rem; border-color: #f0f0f0; white-space: nowrap; }
+    body.dark-mode #stats-panel tbody td { border-color: #2a2d4a; }
+
     /* Toast */
     .toast-container { z-index: 9999; }
 
@@ -273,6 +284,8 @@ let state = {
   lastRows: null,
   // Client-side sort state: { colIdx: number, dir: 'asc'|'desc' } or null
   sortState: null,
+  // Whether the column stats panel is visible
+  statsVisible: false,
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -462,6 +475,12 @@ function renderTable(d) {
               title="Download the current page as JSON">
         Export JSON
       </button>
+      <button class="btn btn-sm btn-outline-secondary"
+              id="stats-toggle-btn"
+              onclick="toggleStatsPanel()"
+              title="Show/hide per-column statistics">
+        Column Stats
+      </button>
       <div class="ms-auto d-flex align-items-center gap-2">
         <label class="text-muted mb-0" style="font-size:.8rem">Per page</label>
         <select class="form-select form-select-sm" style="width:75px" onchange="changeSize(+this.value)">
@@ -544,6 +563,7 @@ function renderTable(d) {
       </nav>
     </div>`;
 
+  const statsVisible = state.statsVisible ? '' : 'display:none';
   document.getElementById('content-inner').innerHTML = `
     ${headerHtml}
     <div id="table-scroll">
@@ -552,7 +572,14 @@ function renderTable(d) {
         <tbody>${tbody}</tbody>
       </table>
     </div>
-    ${pager}`;
+    ${pager}
+    <div id="stats-panel" style="${statsVisible}">
+      <div class="p-2 text-muted" style="font-size:.78rem" id="stats-content">
+        <span class="spinner-border spinner-border-sm text-primary me-1"></span> Loading stats…
+      </div>
+    </div>`;
+
+  if (state.statsVisible) loadStatsPanel();
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
@@ -603,6 +630,56 @@ async function changeSize(n) {
   state.page = 0;
   savePageSize(size);
   await loadData();
+}
+
+// ── Column stats panel ─────────────────────────────────────────────────────────
+function toggleStatsPanel() {
+  state.statsVisible = !state.statsVisible;
+  const panel = document.getElementById('stats-panel');
+  if (!panel) return;
+  if (state.statsVisible) {
+    panel.style.display = '';
+    loadStatsPanel();
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function loadStatsPanel() {
+  const el = document.getElementById('stats-content');
+  if (!el || !state.table) return;
+  el.innerHTML = `<span class="spinner-border spinner-border-sm text-primary me-1"></span> Loading stats…`;
+  try {
+    const url = `/api/table/stats?path=${enc(state.lakePath)}&table=${enc(state.table)}`;
+    const d = await apiFetch(url);
+    if (!d.stats || d.stats.length === 0) {
+      el.innerHTML = '<span class="text-muted">No columns found.</span>';
+      return;
+    }
+    const rows = d.stats.map(s => `
+      <tr>
+        <td class="fw-semibold">${esc(s.name)}</td>
+        <td class="text-muted">${esc(s.type)}</td>
+        <td class="text-end">${s.nullCount.toLocaleString()}</td>
+        <td class="text-end">${s.distinctCount.toLocaleString()}</td>
+        <td>${s.min === null ? '<span class="null-val">NULL</span>' : esc(String(s.min))}</td>
+        <td>${s.max === null ? '<span class="null-val">NULL</span>' : esc(String(s.max))}</td>
+      </tr>`).join('');
+    el.outerHTML = `
+      <table class="table table-sm table-hover mb-0" id="stats-table">
+        <thead>
+          <tr>
+            <th>Column</th><th>Type</th>
+            <th class="text-end">Null Count</th>
+            <th class="text-end">Distinct Count</th>
+            <th>Min</th><th>Max</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch (e) {
+    el.innerHTML = `<span class="text-danger">${esc(e.message)}</span>`;
+  }
 }
 
 // ── CSV export ─────────────────────────────────────────────────────────────────

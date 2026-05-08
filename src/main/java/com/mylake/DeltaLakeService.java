@@ -1,6 +1,7 @@
 package com.mylake;
 
 import com.mylake.model.ColumnInfo;
+import com.mylake.model.ColumnStats;
 import com.mylake.model.TableData;
 import com.mylake.model.TableInfo;
 import jakarta.annotation.PostConstruct;
@@ -135,5 +136,64 @@ public class DeltaLakeService {
 
         int totalPages = pageSize > 0 ? (int) Math.ceil((double) total / pageSize) : 1;
         return new TableData(cols, rows, total, page, pageSize, totalPages);
+    }
+
+    /**
+     * Computes per-column statistics (null count, min, max, distinct count) for a Delta table.
+     */
+    public synchronized List<ColumnStats> getColumnStats(String tablePath) throws SQLException {
+        if (!ready) {
+            throw new IllegalStateException("Delta extension not ready" + (initError != null ? ": " + initError : ""));
+        }
+        if (tablePath.contains("'") || tablePath.contains(";")) {
+            throw new IllegalArgumentException("Path contains invalid characters");
+        }
+
+        String escaped = tablePath.replace("\\", "\\\\");
+
+        // Discover columns first
+        List<ColumnInfo> cols = new ArrayList<>();
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery("SELECT * FROM delta_scan('" + escaped + "') LIMIT 0")) {
+            ResultSetMetaData meta = rs.getMetaData();
+            for (int i = 1; i <= meta.getColumnCount(); i++) {
+                cols.add(new ColumnInfo(meta.getColumnName(i), meta.getColumnTypeName(i)));
+            }
+        }
+
+        if (cols.isEmpty()) {
+            return List.of();
+        }
+
+        // Build a single query that computes stats for all columns at once
+        StringBuilder sb = new StringBuilder("SELECT ");
+        for (int i = 0; i < cols.size(); i++) {
+            String col = "\"" + cols.get(i).name().replace("\"", "\"\"") + "\"";
+            if (i > 0) sb.append(", ");
+            sb.append("COUNT(*) - COUNT(").append(col).append(") AS n").append(i)
+              .append(", MIN(").append(col).append(") AS mn").append(i)
+              .append(", MAX(").append(col).append(") AS mx").append(i)
+              .append(", COUNT(DISTINCT ").append(col).append(") AS d").append(i);
+        }
+        sb.append(" FROM delta_scan('").append(escaped).append("')");
+
+        List<ColumnStats> result = new ArrayList<>(cols.size());
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery(sb.toString())) {
+            rs.next();
+            for (int i = 0; i < cols.size(); i++) {
+                long nullCount     = rs.getLong("n" + i);
+                Object min         = rs.getObject("mn" + i);
+                Object max         = rs.getObject("mx" + i);
+                long distinctCount = rs.getLong("d" + i);
+                if (min instanceof Number || min instanceof Boolean) { /* keep as-is */ }
+                else if (min != null) { min = min.toString(); }
+                if (max instanceof Number || max instanceof Boolean) { /* keep as-is */ }
+                else if (max != null) { max = max.toString(); }
+                result.add(new ColumnStats(cols.get(i).name(), cols.get(i).type(),
+                                           nullCount, min, max, distinctCount));
+            }
+        }
+        return result;
     }
 }
