@@ -440,6 +440,18 @@ document.getElementById('recent-paths-toggle')
 renderRecentPathsMenu();
 initDarkMode();
 applyTranslations();
+// Browser back/forward support
+window.addEventListener('popstate', async (e) => {
+  if (e.state) {
+    state.lakePath = e.state.lakePath || '';
+    state.table    = e.state.table    || '';
+    state.page     = e.state.page     || 0;
+    if (state.lakePath) document.getElementById('lake-path').value = state.lakePath;
+    if (state.table) await loadData();
+  }
+});
+// Restore state from URL on initial load
+restoreFromUrl();
 checkStatus();
 
 // ── Recent lake paths (persisted) ─────────────────────────────────────────────
@@ -552,6 +564,7 @@ async function loadTables() {
     const d = await apiFetch('/api/tables?path=' + enc(path));
     // Successful response — remember this path even if the lake has no tables yet.
     pushRecentPath(path);
+    replaceViewState();
     if (d.tables.length === 0) {
       list.innerHTML = '<div class="state-box"><div class="icon">📭</div><div>' + esc(t('noTablesFound')) + '</div></div>';
       return;
@@ -574,6 +587,7 @@ async function selectTable(name) {
   state.page = 0;
   state.sortState = null;  // clear sort when switching tables
   await loadData();
+  pushViewState();
 }
 
 async function loadData() {
@@ -754,6 +768,7 @@ async function goPage(p) {
   if (p < 0 || p >= state.totalPages) return;
   state.page = p;
   await loadData();
+  pushViewState();
   document.getElementById('table-scroll')?.scrollTo(0, 0);
 }
 
@@ -856,6 +871,60 @@ function openSchemaPanel() {
 function closeSchemaPanel() {
   document.getElementById('schema-panel').classList.remove('open');
 }
+
+// ── Shareable URL ─────────────────────────────────────────────────────────────
+function pushViewState() {
+  const params = new URLSearchParams();
+  if (state.lakePath) params.set('path', state.lakePath);
+  if (state.table)    params.set('table', state.table);
+  if (state.page > 0) params.set('page', state.page);
+  const search = params.toString() ? '?' + params.toString() : location.pathname;
+  history.pushState({ lakePath: state.lakePath, table: state.table, page: state.page },
+                    '', search);
+}
+
+function replaceViewState() {
+  const params = new URLSearchParams();
+  if (state.lakePath) params.set('path', state.lakePath);
+  if (state.table)    params.set('table', state.table);
+  if (state.page > 0) params.set('page', state.page);
+  const search = params.toString() ? '?' + params.toString() : location.pathname;
+  history.replaceState({ lakePath: state.lakePath, table: state.table, page: state.page },
+                       '', search);
+}
+
+async function restoreFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const path  = params.get('path');
+  const table = params.get('table');
+  const page  = parseInt(params.get('page') || '0', 10);
+  if (!path) return;
+  // Restore path input
+  document.getElementById('lake-path').value = path;
+  state.lakePath = path;
+  if (table) {
+    state.table = table;
+    state.page  = isFinite(page) && page >= 0 ? page : 0;
+    // Load the table list silently, then select the table
+    try {
+      const d = await apiFetch('/api/tables?path=' + enc(path));
+      const list = document.getElementById('table-list');
+      list.innerHTML = d.tables.map(t => `
+        <div class="tbl-item" data-name="${attr(t.name)}" onclick="selectTable('${attr(t.name)}')">
+          <div class="tbl-name">${esc(t.name)}</div>
+          <div class="tbl-path" title="${attr(t.path)}">${esc(t.path)}</div>
+        </div>`).join('');
+      // Highlight the selected table
+      document.querySelectorAll('.tbl-item').forEach(el =>
+        el.classList.toggle('active', el.dataset.name === table));
+      await loadData();
+    } catch { /* silently ignore — user can reload manually */ }
+  } else {
+    // Just load the table list
+    loadTables();
+  }
+}
+
 
 // ── Misc ───────────────────────────────────────────────────────────────────────
 function resetContent() {
