@@ -6,15 +6,16 @@ expect.
 
 ## Where to find it
 
-A **Filter rows** text input sits just above the data table, between the
-column/row count summary and the table grid. It is always visible whenever a
-table is open.
+Click the **🔍 Filter** button in the content header toolbar (above the data
+grid) to open the filter bar. The filter bar slides in below the toolbar.
+Click **🔍 Filter** again, or the **✕** button inside the filter bar, to close
+it and clear any active filter.
 
 ## How it works
 
 Type any text into the filter input. MyLake immediately hides rows that do not
 contain that text in any visible column, leaving only the matching rows on
-screen.
+screen. A match count (e.g. **3 matches**) is displayed next to the input.
 
 The filter is:
 
@@ -23,10 +24,12 @@ The filter is:
 - **Applied across all columns** — if any cell in a row contains the search
   text, that row is shown.
 
+If no rows match, the table body shows **No rows match the filter**.
+
 ## Clearing the filter
 
-Delete the text from the filter input (or press **Escape** while the input is
-focused) to clear the filter and show all rows again.
+Click the **✕** button inside the filter bar to clear the filter text and
+restore all rows. This also closes the filter bar.
 
 ## Scope of filtering
 
@@ -42,6 +45,8 @@ filter box.
 > that produces zero visible rows does not necessarily mean the value does not
 > exist in the table — there may be matching rows on other pages. Navigate
 > page-by-page or raise the page size to cast a wider net.
+
+The filter state also resets automatically when you switch to a different table.
 
 ## Performance note
 
