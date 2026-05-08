@@ -44,9 +44,11 @@ MyLake preserves native JSON types where possible:
 
 ### File naming
 
-The downloaded file is named `<table-name>-page<N>.json` (page numbers start
-at 1). For example, browsing a table called `events` on page 2 produces
-`events-page2.json`.
+The downloaded file is named `<table>-page<N>-<timestamp>.json`, where the
+timestamp is in the format `YYYY-MM-DDTHH-MM-SS` (colons replaced with
+hyphens). Page numbers start at 1. For example, exporting page 2 of a table
+called `events` on 2024-03-15 at 12:00 produces a file named something like
+`events-page2-2024-03-15T12-00-00.json`.
 
 ## Tips
 
