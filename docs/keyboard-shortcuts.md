@@ -38,18 +38,19 @@ below lists all available shortcuts:
 
 ## Platform notes
 
-- On **macOS**, substitute `Cmd` where `Ctrl` is written above.
-- Shortcuts are active when focus is inside the table viewer area. They do
-  not fire when you are typing in the filter input or another text field.
+- Shortcuts use `Ctrl` on all platforms, including macOS (the `Cmd` key is
+  not used).
+- Shortcuts are suppressed when focus is inside a text input, textarea, or
+  select element. The arrow-key and `?` shortcuts also require focus to be
+  outside any input field.
 
 ## Conflicts with browser shortcuts
 
 A small number of shortcuts overlap with browser defaults:
 
-- `Ctrl+F` (or `Cmd+F` on macOS) normally opens the browser's built-in page
-  search. MyLake intercepts this shortcut _only when focus is inside the table
-  viewer_, redirecting it to the filter input. The browser search can still be
-  opened by clicking outside the table and then pressing `Ctrl+F`.
+- `Ctrl+F` normally opens the browser's built-in page search. MyLake
+  intercepts this shortcut globally, redirecting it to the filter input.
+  The browser search can still be opened via the browser menu.
 
 ## Discovering shortcuts in the app
 
