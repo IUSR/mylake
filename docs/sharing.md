@@ -3,7 +3,7 @@
 MyLake keeps the browser URL in sync with what you are looking at. This means
 you can copy the URL from the address bar at any time and share it — whoever
 opens the link lands on exactly the same view you were looking at: same table,
-same page, same sort, same filter.
+same page.
 
 ## How it works
 
@@ -14,15 +14,13 @@ does not reload). The URL captures:
 | Parameter | What it records                              | Example value       |
 | --------- | -------------------------------------------- | ------------------- |
 | `path`    | The lake path (Delta table location)         | `s3://my-bucket/events` |
+| `table`   | The selected table name                      | `events`            |
 | `page`    | The current page number (1-based)            | `3`                 |
-| `sort`    | The column being sorted, if any              | `created_at`        |
-| `dir`     | Sort direction (`asc` or `desc`)             | `desc`              |
-| `filter`  | The current filter query, if any             | `alice`             |
 
 ## Sharing a link
 
 1. Navigate to the table view you want to share.
-2. Apply any sort, filter, or page navigation you want the recipient to see.
+2. Navigate to the page you want the recipient to see.
 3. Copy the URL from your browser's address bar.
 4. Paste it wherever you like — email, Slack, a GitHub issue comment, etc.
 
@@ -33,26 +31,23 @@ the underlying Delta table).
 ## Browser navigation
 
 Because the URL updates as you navigate, the browser's **Back** and
-**Forward** buttons work as expected — you can step back through pages and
-sorts just like navigating between web pages.
+**Forward** buttons work as expected — you can step back through pages just
+like navigating between web pages.
 
 ## Bookmarking
 
 You can bookmark any URL to save a frequently visited table view. The bookmark
-will always open the same table at the same page, sort, and filter.
+will always open the same table at the same page.
 
 ## Limitations
 
 - The URL reflects the **current page state**, not the full table. If the
   table data changes between when you copy the URL and when the recipient opens
-  it, they will see the updated data at the same coordinates (page 3, column
-  sorted, etc.) rather than a frozen snapshot. Use the
+  it, they will see the updated data at the same coordinates (page 3, etc.)
+  rather than a frozen snapshot. Use the
   [version history viewer](version-history.md) if you need to share a specific
   historical snapshot.
-- Very long filter strings or table paths may make the URL unwieldy, but they
-  will still work.
-- The URL parameters are plain text and not encrypted. Avoid putting sensitive
-  credentials or tokens in the filter field.
+- Very long table paths may make the URL unwieldy, but they will still work.
 
 ## Related
 
