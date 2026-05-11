@@ -15,7 +15,8 @@ documentation page currently available, grouped by topic.
 | ---- | -------------- |
 | [Browsing tables](browsing.md) | Selecting a table from the sidebar, navigating pages, and setting rows per page. |
 | [Searching the table list](table-search.md) | Filtering the sidebar table list by name using a keyword. |
-| [Filtering rows](filtering.md) | Using the row filter to narrow down the data table by keyword. |
+| [Filtering rows](filtering.md) | Using the in-page row filter to narrow down the data table by keyword (current page only). |
+| [Column filters](column-filters.md) | Per-column server-side filters that search the full table (not just the current page). |
 | [Column sorting](sorting.md) | Sorting the data table by any column. |
 | [Column visibility](column-visibility.md) | Hiding and showing columns in the data grid; effect on CSV and JSON export. |
 | [Row detail panel](row-detail.md) | Viewing all fields for a selected row in a slide-in side panel. |
