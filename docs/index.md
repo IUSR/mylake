@@ -29,6 +29,7 @@ documentation page currently available, grouped by topic.
 | ---- | -------------- |
 | [Exporting data (CSV)](exporting.md) | Downloading the current page as a CSV file. |
 | [Exporting data (JSON)](json-export.md) | Downloading the current page as a JSON file. |
+| [Exporting all rows](export-full.md) | Downloading the full table (up to 500,000 rows) as CSV or JSON via server-side streaming. |
 | [Inline SQL query editor](sql-editor.md) | Writing and running DuckDB SQL against the current table from within the browser. |
 | [Refreshing table data](refresh.md) | Reloading the current page data from the server without changing view settings. |
 
@@ -55,6 +56,7 @@ documentation page currently available, grouped by topic.
 | Page | What it covers |
 | ---- | -------------- |
 | [Allowed paths](allowed-paths.md) | Restricting which filesystem directories MyLake can access via the `mylake.allowed-paths` configuration property. |
+| [Full-table export configuration](export-full.md#row-limit) | Setting the `mylake.export.max-rows` limit for server-side full-table exports. |
 
 ## Contributing to the docs
 
