@@ -9,13 +9,17 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @ApplicationScoped
@@ -194,6 +198,79 @@ public class DeltaLakeService {
         result.put("columns", columns);
         result.put("rows", rows);
         result.put("rowCount", rows.size());
+        return result;
+    }
+
+    /**
+     * Returns schema metadata for a Delta table:
+     * - columns[]: { name, type, nullable }  via DESCRIBE delta_scan(...)
+     * - stats: { rowCount, sizeBytes }        row count via COUNT(*), size from Delta log
+     * - deltaVersion: highest version number from _delta_log/
+     */
+    public synchronized Map<String, Object> getSchema(String tablePath) throws Exception {
+        if (!ready) {
+            throw new IllegalStateException("Delta extension not ready" + (initError != null ? ": " + initError : ""));
+        }
+        if (tablePath.contains("'") || tablePath.contains(";")) {
+            throw new IllegalArgumentException("Path contains invalid characters");
+        }
+        String escaped = tablePath.replace("\\", "\\\\");
+
+        // Columns from DESCRIBE
+        List<Map<String, Object>> cols = new ArrayList<>();
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery("DESCRIBE SELECT * FROM delta_scan('" + escaped + "')")) {
+            while (rs.next()) {
+                Map<String, Object> col = new LinkedHashMap<>();
+                col.put("name", rs.getString(1));
+                col.put("type", rs.getString(2));
+                col.put("nullable", !"NO".equalsIgnoreCase(rs.getString(3)));
+                cols.add(col);
+            }
+        }
+
+        // Row count
+        long rowCount = 0;
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM delta_scan('" + escaped + "')")) {
+            if (rs.next()) rowCount = rs.getLong(1);
+        }
+
+        // Delta version and total file size from _delta_log
+        long deltaVersion = -1;
+        long sizeBytes = -1;
+        Path logDir = Path.of(tablePath, "_delta_log");
+        if (Files.isDirectory(logDir)) {
+            // Highest version from JSON file names (e.g. 0000000000000000002.json → 2)
+            try (Stream<Path> files = Files.list(logDir)) {
+                deltaVersion = files
+                    .filter(p -> p.getFileName().toString().endsWith(".json"))
+                    .mapToLong(p -> {
+                        try {
+                            String name = p.getFileName().toString().replace(".json", "");
+                            return Long.parseLong(name);
+                        } catch (NumberFormatException e) { return -1L; }
+                    })
+                    .max()
+                    .orElse(-1L);
+            }
+            // Approximate table size: sum sizes of Parquet files in the table dir
+            try {
+                sizeBytes = Files.walk(Path.of(tablePath))
+                    .filter(p -> p.getFileName().toString().endsWith(".parquet"))
+                    .mapToLong(p -> { try { return Files.size(p); } catch (IOException e) { return 0L; } })
+                    .sum();
+            } catch (IOException ignored) {}
+        }
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("rowCount", rowCount);
+        if (sizeBytes >= 0) stats.put("sizeBytes", sizeBytes);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("columns", cols);
+        result.put("stats", stats);
+        if (deltaVersion >= 0) result.put("deltaVersion", deltaVersion);
         return result;
     }
 }

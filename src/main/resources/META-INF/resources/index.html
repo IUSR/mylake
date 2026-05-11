@@ -176,6 +176,10 @@
     .schema-col-name { font-weight: 600; color: #212529; }
     .schema-col-type { font-size: .72rem; color: #6c757d; margin-top: 1px; }
     .schema-nullable { font-size: .65rem; color: #adb5bd; margin-left: .3rem; }
+    .schema-stats { padding: .5rem .75rem; border-bottom: 1px solid #eee; font-size: .8rem; }
+    .schema-stats-label { font-size: .68rem; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; }
+    body.dark-mode .schema-stats { border-color: #2a2d4a; }
+    body.dark-mode .schema-stats-label { color: #8b9ec7; }
   </style>
 </head>
 <body>
@@ -832,25 +836,69 @@ function exportJson() {
 }
 
 // ── Schema inspector ───────────────────────────────────────────────────────────
-function toggleSchemaPanel() {
+async function toggleSchemaPanel() {
   const panel = document.getElementById('schema-panel');
   if (panel.classList.contains('open')) {
     closeSchemaPanel();
   } else {
-    openSchemaPanel();
+    await openSchemaPanel();
   }
 }
 
-function openSchemaPanel() {
-  const cols = state.lastColumns;
-  if (!cols) return;
+async function openSchemaPanel() {
+  if (!state.table || !state.lakePath) return;
   const list = document.getElementById('schema-list');
-  list.innerHTML = cols.map(c => `
-    <div class="schema-row">
-      <div class="schema-col-name">${esc(c.name)}</div>
-      <div class="schema-col-type">${esc(c.type)}</div>
-    </div>`).join('');
+  list.innerHTML = '<div class="p-3 text-muted" style="font-size:.82rem">Loading…</div>';
   document.getElementById('schema-panel').classList.add('open');
+  try {
+    const d = await apiFetch('/api/table/schema?path=' + enc(state.lakePath) + '&table=' + enc(state.table));
+    let html = '';
+    // Stats section
+    if (d.stats || d.deltaVersion !== undefined) {
+      html += '<div class="schema-stats">';
+      if (d.stats) {
+        if (d.stats.rowCount !== undefined) {
+          html += `<div><span class="schema-stats-label">Row Count</span> ${Number(d.stats.rowCount).toLocaleString()}</div>`;
+        }
+        if (d.stats.sizeBytes !== undefined) {
+          const kb = (d.stats.sizeBytes / 1024).toFixed(1);
+          const mb = (d.stats.sizeBytes / 1024 / 1024).toFixed(2);
+          html += `<div><span class="schema-stats-label">Size</span> ${mb} MB</div>`;
+        }
+      }
+      if (d.deltaVersion !== undefined) {
+        html += `<div><span class="schema-stats-label">Delta Version</span> ${d.deltaVersion}</div>`;
+      }
+      html += '</div>';
+    }
+    // Columns section
+    if (d.columns && d.columns.length > 0) {
+      html += d.columns.map(c => `
+        <div class="schema-row">
+          <div class="schema-col-name">${esc(c.name)}${c.nullable === false ? '<span class="schema-nullable">NOT NULL</span>' : ''}</div>
+          <div class="schema-col-type">${esc(c.type)}</div>
+        </div>`).join('');
+    } else {
+      // Fallback to cached columns if API returned nothing
+      const cols = state.lastColumns;
+      if (cols) {
+        html += cols.map(c => `
+          <div class="schema-row">
+            <div class="schema-col-name">${esc(c.name)}</div>
+            <div class="schema-col-type">${esc(c.type)}</div>
+          </div>`).join('');
+      }
+    }
+    list.innerHTML = html || '<div class="p-3 text-muted">No schema available</div>';
+  } catch (e) {
+    // Fallback: show columns from cached data
+    const cols = state.lastColumns;
+    list.innerHTML = cols ? cols.map(c => `
+      <div class="schema-row">
+        <div class="schema-col-name">${esc(c.name)}</div>
+        <div class="schema-col-type">${esc(c.type)}</div>
+      </div>`).join('') : '<div class="p-3 text-danger">' + esc(e.message) + '</div>';
+  }
 }
 
 function closeSchemaPanel() {
