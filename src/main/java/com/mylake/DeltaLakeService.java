@@ -196,4 +196,44 @@ public class DeltaLakeService {
         result.put("rowCount", rows.size());
         return result;
     }
+
+    /**
+     * Exports up to maxRows rows from a Delta table as a list of row arrays.
+     * Returns columns and rows suitable for streaming CSV or JSON.
+     */
+    public synchronized Map<String, Object> exportAll(String tablePath, int maxRows) throws SQLException {
+        if (!ready) {
+            throw new IllegalStateException("Delta extension not ready" + (initError != null ? ": " + initError : ""));
+        }
+        if (tablePath.contains("'") || tablePath.contains(";")) {
+            throw new IllegalArgumentException("Path contains invalid characters");
+        }
+        String escaped = tablePath.replace("\\", "\\\\");
+
+        List<ColumnInfo> cols = new ArrayList<>();
+        List<List<Object>> rows = new ArrayList<>();
+
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery(
+                 "SELECT * FROM delta_scan('" + escaped + "') LIMIT " + maxRows)) {
+            ResultSetMetaData meta = rs.getMetaData();
+            int n = meta.getColumnCount();
+            for (int i = 1; i <= n; i++) {
+                cols.add(new ColumnInfo(meta.getColumnName(i), meta.getColumnTypeName(i)));
+            }
+            while (rs.next()) {
+                List<Object> row = new ArrayList<>(n);
+                for (int i = 1; i <= n; i++) {
+                    Object v = rs.getObject(i);
+                    row.add(v == null ? null : (v instanceof Number || v instanceof Boolean ? v : v.toString()));
+                }
+                rows.add(row);
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("columns", cols);
+        result.put("rows", rows);
+        return result;
+    }
 }

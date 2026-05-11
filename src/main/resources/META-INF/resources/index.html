@@ -611,18 +611,36 @@ function renderTable(d) {
               title="View table schema">
         Schema
       </button>
-      <button class="btn btn-sm btn-outline-secondary"
-              onclick="exportCsv()"
-              ${rows.length === 0 ? 'disabled' : ''}
-              title="Download the current page as CSV">
-        ${t('exportCsv')}
-      </button>
-      <button class="btn btn-sm btn-outline-secondary"
-              onclick="exportJson()"
-              ${rows.length === 0 ? 'disabled' : ''}
-              title="Download the current page as JSON">
-        Export JSON
-      </button>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" onclick="exportCsv()"
+                ${rows.length === 0 ? 'disabled' : ''}
+                title="Download the current page as CSV">
+          ${t('exportCsv')}
+        </button>
+        <button class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                data-bs-toggle="dropdown" aria-expanded="false" ${rows.length === 0 ? 'disabled' : ''}>
+          <span class="visually-hidden">CSV options</span>
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="#" onclick="exportCsv();return false">Current page</a></li>
+          <li><a class="dropdown-item" href="#" onclick="exportAllCsv();return false">All rows (up to ${(500000).toLocaleString()})</a></li>
+        </ul>
+      </div>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" onclick="exportJson()"
+                ${rows.length === 0 ? 'disabled' : ''}
+                title="Download the current page as JSON">
+          Export JSON
+        </button>
+        <button class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                data-bs-toggle="dropdown" aria-expanded="false" ${rows.length === 0 ? 'disabled' : ''}>
+          <span class="visually-hidden">JSON options</span>
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="#" onclick="exportJson();return false">Current page</a></li>
+          <li><a class="dropdown-item" href="#" onclick="exportAllJson();return false">All rows (up to ${(500000).toLocaleString()})</a></li>
+        </ul>
+      </div>
       <button class="btn btn-sm btn-outline-secondary" onclick="toggleSqlEditor()"
               title="Open inline SQL query editor">
         SQL Editor
@@ -801,6 +819,24 @@ function exportCsv() {
   // Free the object URL on the next tick (giving the browser time to start the download).
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
+
+// ── Full-table export (all rows via backend) ────────────────────────────────────
+function triggerAllRowsDownload(format) {
+  if (!state.table || !state.lakePath) {
+    showErr(t('errNothingExport'));
+    return;
+  }
+  // Build download URL — browser will handle Content-Disposition attachment
+  const url = '/api/table/export?path=' + enc(state.lakePath) + '&table=' + enc(state.table) + '&format=' + format;
+  const a = document.createElement('a');
+  a.href = url;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function exportAllCsv()  { triggerAllRowsDownload('csv'); }
+function exportAllJson() { triggerAllRowsDownload('json'); }
 
 // ── JSON export ────────────────────────────────────────────────────────────────
 // Exports the page currently in memory as an array of row objects.
