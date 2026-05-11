@@ -52,6 +52,10 @@
     body.dark-mode .sql-result-tbl tbody td { border-color: #2a2d4a; }
     body.dark-mode .btn-outline-secondary:hover { background: #2e3050; color: #d0d5e8; }
     body.dark-mode .text-muted { color: #8b9ec7 !important; }
+    body.dark-mode #cell-popover { background: #22243a; border-color: #333655; color: #d0d5e8; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+    body.dark-mode #cell-popover-header { background: #171929; border-color: #333655; color: #8b9ec7; }
+    body.dark-mode #cell-popover pre { background: #1a1c27; border-color: #333655; color: #d0d5e8; }
+    body.dark-mode #cell-popover .btn-copy { color: #9aa5b4; border-color: #555e7a; }
 
     /* Dark mode toggle button */
     #dark-toggle { font-size: .82rem; padding: .2rem .5rem; border-radius: 4px;
@@ -158,6 +162,25 @@
     .browse-up:hover { background: #eef3ff; }
     .browse-icon  { font-size: 1rem; flex-shrink: 0; }
     .browse-name  { font-size: .87rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Cell detail popover */
+    #cell-popover { position: fixed; z-index: 9990; background: #fff; border: 1px solid #dee2e6;
+                    border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+                    min-width: 220px; max-width: 420px; display: none; }
+    #cell-popover.visible { display: block; }
+    #cell-popover-header { padding: .3rem .6rem; background: #f8f9fa; border-bottom: 1px solid #eee;
+                           font-size: .72rem; font-weight: 600; color: #6c757d;
+                           text-transform: uppercase; letter-spacing: .04em;
+                           display: flex; justify-content: space-between; align-items: center;
+                           border-radius: 6px 6px 0 0; }
+    #cell-popover-body { padding: .5rem .65rem; }
+    #cell-popover pre { font-size: .8rem; white-space: pre-wrap; word-break: break-word;
+                        max-height: 300px; overflow: auto; margin: 0; background: #f8f9fa;
+                        border: 1px solid #eee; border-radius: 4px; padding: .4rem .5rem; }
+    #cell-popover .btn-copy { font-size: .75rem; padding: .15rem .4rem; cursor: pointer;
+                              border: 1px solid #dee2e6; border-radius: 4px;
+                              background: transparent; color: #6c757d; transition: all .15s; }
+    #cell-popover .btn-copy:hover { background: #e9ecef; color: #212529; }
 
     /* Schema inspector panel */
     #schema-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 260px;
@@ -279,6 +302,17 @@
         <button type="button" class="btn btn-sm btn-primary" onclick="confirmBrowse()" data-i18n="selectThisDir">Select This Directory</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Cell detail popover -->
+<div id="cell-popover">
+  <div id="cell-popover-header">
+    <span id="cell-popover-col">Cell value</span>
+    <button class="btn-copy" id="cell-copy-btn" onclick="copyCellValue()" title="Copy to clipboard">Copy</button>
+  </div>
+  <div id="cell-popover-body">
+    <pre id="cell-popover-pre"></pre>
   </div>
 </div>
 
@@ -829,6 +863,87 @@ function exportJson() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// ── Cell detail popover ────────────────────────────────────────────────────────
+let _cellPopoverValue = null;
+
+// Event delegation: click on any td inside #table-scroll
+document.addEventListener('click', e => {
+  const popover = document.getElementById('cell-popover');
+  // If click is inside the popover, ignore
+  if (popover && popover.contains(e.target)) return;
+
+  // Find closest td in data table (not row-num column)
+  const td = e.target.closest('#table-scroll .data-tbl tbody td:not(.row-num)');
+  if (td) {
+    e.stopPropagation();
+    // Extract raw value from the title attribute (set during render)
+    const raw = td.getAttribute('title');
+    showCellPopover(e, raw, td);
+    return;
+  }
+  // Click outside → dismiss
+  closeCellPopover();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCellPopover();
+}, true);
+
+function showCellPopover(event, rawValue, tdEl) {
+  _cellPopoverValue = rawValue;
+  const popover  = document.getElementById('cell-popover');
+  const pre      = document.getElementById('cell-popover-pre');
+  const colLabel = document.getElementById('cell-popover-col');
+
+  if (!popover || !pre) return;
+
+  // Set column name label from <th> at same column index
+  const td      = tdEl;
+  const colIdx  = Array.from(td.parentElement.children).indexOf(td);
+  const thead   = td.closest('table')?.querySelector('thead tr');
+  const thEl    = thead ? thead.children[colIdx] : null;
+  const colName = thEl ? (thEl.firstChild?.textContent?.trim() || 'Cell') : 'Cell';
+  if (colLabel) colLabel.textContent = colName;
+
+  // Render value
+  if (rawValue === null || rawValue === 'null' || rawValue === '') {
+    pre.innerHTML = '<span class="null-val">NULL (no value)</span>';
+  } else if (rawValue.length > 200) {
+    pre.textContent = rawValue;
+  } else {
+    pre.textContent = rawValue;
+  }
+
+  // Position popover near the clicked cell
+  const rect = tdEl.getBoundingClientRect();
+  popover.classList.add('visible');
+  const pw = popover.offsetWidth;
+  const ph = popover.offsetHeight;
+  let left = rect.left + window.scrollX;
+  let top  = rect.bottom + window.scrollY + 4;
+  // Keep within viewport
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (top + ph > window.innerHeight + window.scrollY - 8) top = rect.top + window.scrollY - ph - 4;
+  popover.style.left = left + 'px';
+  popover.style.top  = top + 'px';
+}
+
+function closeCellPopover() {
+  const popover = document.getElementById('cell-popover');
+  if (popover) popover.classList.remove('visible');
+  _cellPopoverValue = null;
+}
+
+function copyCellValue() {
+  if (_cellPopoverValue === null) return;
+  const btn = document.getElementById('cell-copy-btn');
+  navigator.clipboard.writeText(_cellPopoverValue).then(() => {
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
+  }).catch(() => {
+    if (btn) { btn.textContent = 'Failed'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
+  });
 }
 
 // ── Schema inspector ───────────────────────────────────────────────────────────
