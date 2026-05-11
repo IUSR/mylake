@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.io.IOException;
@@ -26,6 +27,35 @@ public class DeltaLakeResource {
     @Inject
     DeltaLakeService svc;
 
+    /**
+     * Comma-separated list of allowed path prefixes. Empty = no restriction (default).
+     * Example: mylake.allowed-paths=/data/lake,/mnt/delta
+     */
+    @ConfigProperty(name = "mylake.allowed-paths", defaultValue = "")
+    String allowedPathsConfig;
+
+    /**
+     * Validates that the given path is within the configured allowlist.
+     * Normalises the path before checking. Returns null if allowed, or a 403 Response if denied.
+     */
+    private Response validatePath(String rawPath) {
+        if (allowedPathsConfig == null || allowedPathsConfig.isBlank()) {
+            return null; // no restriction
+        }
+        java.nio.file.Path normalised = java.nio.file.Path.of(rawPath).normalize().toAbsolutePath();
+        String[] prefixes = allowedPathsConfig.split(",");
+        for (String prefix : prefixes) {
+            String trimmed = prefix.trim();
+            if (trimmed.isEmpty()) continue;
+            java.nio.file.Path allowedPrefix = java.nio.file.Path.of(trimmed).normalize().toAbsolutePath();
+            if (normalised.startsWith(allowedPrefix)) {
+                return null; // allowed
+            }
+        }
+        LOG.warnf("Path rejected by allowlist: %s", normalised);
+        return Response.status(403).entity(Map.of("error", "Access denied: path is outside the allowed directories")).build();
+    }
+
     @GET
     @Path("/status")
     public Map<String, Object> status() {
@@ -39,6 +69,8 @@ public class DeltaLakeResource {
     @Path("/tables")
     public Response tables(@QueryParam("path") String path) {
         if (path == null || path.isBlank()) return bad("missing 'path' parameter");
+        Response denied = validatePath(path);
+        if (denied != null) return denied;
         try {
             List<TableInfo> tables = svc.listTables(path);
             return Response.ok(Map.of("tables", tables)).build();
@@ -64,6 +96,8 @@ public class DeltaLakeResource {
         if (table.contains("..") || table.contains("/") || table.contains("\\")) {
             return bad("invalid table name");
         }
+        Response denied = validatePath(path);
+        if (denied != null) return denied;
 
         page = Math.max(0, page);
         size = Math.min(1000, Math.max(1, size));
@@ -93,6 +127,9 @@ public class DeltaLakeResource {
 
         if (path == null || path.isBlank()) return bad("missing 'path' field");
         if (sql  == null || sql.isBlank())  return bad("missing 'sql' field");
+        // The path here is the full tablePath (includes table name), validate against allowed prefixes
+        Response denied = validatePath(path);
+        if (denied != null) return denied;
 
         try {
             Map<String, Object> result = svc.runQuery(path, sql);
@@ -117,6 +154,8 @@ public class DeltaLakeResource {
         if (path == null || path.isBlank()) {
             path = System.getProperty("user.dir");
         }
+        Response denied = validatePath(path);
+        if (denied != null) return denied;
         java.nio.file.Path dir = java.nio.file.Path.of(path).toAbsolutePath().normalize();
         if (!Files.isDirectory(dir)) {
             return bad("Not a directory: " + dir);
