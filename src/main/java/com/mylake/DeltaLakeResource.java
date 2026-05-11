@@ -106,6 +106,33 @@ public class DeltaLakeResource {
     }
 
     @GET
+    @Path("/table/schema")
+    public Response schema(
+            @QueryParam("path") String path,
+            @QueryParam("table") String table) {
+
+        if (path == null || path.isBlank()) return bad("missing 'path' parameter");
+        if (table == null || table.isBlank()) return bad("missing 'table' parameter");
+        if (table.contains("..") || table.contains("/") || table.contains("\\")) {
+            return bad("invalid table name");
+        }
+
+        String tablePath = path.endsWith("/") || path.endsWith("\\")
+            ? path + table
+            : path + "/" + table;
+
+        try {
+            Map<String, Object> result = svc.getSchema(tablePath);
+            return Response.ok(result).build();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return bad(e.getMessage());
+        } catch (Exception e) {
+            LOG.errorf("getSchema error for %s: %s", tablePath, e.getMessage());
+            return err(e.getMessage());
+        }
+    }
+
+    @GET
     @Path("/fs/cwd")
     public Map<String, String> cwd() {
         return Map.of("path", java.nio.file.Path.of(System.getProperty("user.dir")).toAbsolutePath().toString());
