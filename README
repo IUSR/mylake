@@ -1,7 +1,21 @@
 MyLake for your local (Delta) lakes
 
-User documentation lives in the docs/ directory:
-  - docs/lake-paths.md  — opening a lake and recent-paths history
-  - docs/browsing.md    — navigating tables and choosing rows per page
-  - docs/exporting.md   — exporting the current page to CSV
-  - docs/language.md    — switching the display language (EN / 中文)
+User documentation lives in the docs/ directory. Start with the index:
+  docs/index.md  — full documentation index
+
+Quick links to commonly used pages:
+  docs/lake-paths.md        — opening a lake and recent-paths history
+  docs/browsing.md          — navigating tables and choosing rows per page
+  docs/filtering.md         — filtering rows by keyword
+  docs/sorting.md           — sorting by any column
+  docs/exporting.md         — exporting the current page to CSV
+  docs/json-export.md       — exporting the current page to JSON
+  docs/sql-editor.md        — inline SQL query editor
+  docs/schema.md            — table schema inspector
+  docs/column-stats.md      — per-column statistics panel
+  docs/version-history.md   — Delta table version history viewer
+  docs/table-properties.md  — table properties modal
+  docs/dark-mode.md         — dark mode toggle
+  docs/language.md          — switching the display language (EN / Chinese)
+  docs/keyboard-shortcuts.md — keyboard shortcuts
+  docs/shareable-url.md     — shareable URLs for the current view
