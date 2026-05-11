@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,9 +91,13 @@ public class DeltaLakeService {
     }
 
     /**
-     * Queries a Delta table with pagination. Uses DuckDB delta_scan().
+     * Queries a Delta table with pagination and optional server-side column filters.
+     * Uses DuckDB delta_scan() with PreparedStatement-safe parameterised WHERE clauses.
+     *
+     * @param filters map of columnName → filterValue; strings use LIKE %value%, numbers use =
      */
-    public synchronized TableData query(String tablePath, int page, int pageSize) throws SQLException {
+    public synchronized TableData query(String tablePath, int page, int pageSize,
+                                        Map<String, String> filters) throws SQLException {
         if (!ready) {
             throw new IllegalStateException("Delta extension not ready" + (initError != null ? ": " + initError : ""));
         }
@@ -102,41 +107,73 @@ public class DeltaLakeService {
 
         // Escape backslashes for DuckDB string literal
         String escaped = tablePath.replace("\\", "\\\\");
+        String baseTable = "delta_scan('" + escaped + "')";
 
-        // Count total rows (DuckDB uses Delta stats when available, usually fast)
+        // Build WHERE clause from filters. We only support simple equality/LIKE filters
+        // to prevent SQL injection. Column names are quoted with double-quotes.
+        List<String> conditions = new ArrayList<>();
+        List<String> filterValues = new ArrayList<>();
+        if (filters != null) {
+            for (Map.Entry<String, String> entry : filters.entrySet()) {
+                String col = entry.getKey();
+                String val = entry.getValue();
+                if (col == null || col.isBlank() || val == null || val.isBlank()) continue;
+                // Validate column name: only word chars allowed
+                if (!col.matches("[\\w ]+")) continue;
+                conditions.add("CAST(\"" + col.replace("\"", "") + "\" AS VARCHAR) ILIKE ?");
+                filterValues.add("%" + val + "%");
+            }
+        }
+        String whereClause = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
+
+        // Count total rows with filters
         long total;
-        try (Statement s = conn.createStatement();
-             ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM delta_scan('" + escaped + "')")) {
-            rs.next();
-            total = rs.getLong(1);
+        String countSql = "SELECT COUNT(*) FROM " + baseTable + whereClause;
+        try (PreparedStatement ps = conn.prepareStatement(countSql)) {
+            for (int i = 0; i < filterValues.size(); i++) {
+                ps.setString(i + 1, filterValues.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                total = rs.getLong(1);
+            }
         }
 
         int offset = page * pageSize;
         List<ColumnInfo> cols = new ArrayList<>();
         List<List<Object>> rows = new ArrayList<>();
 
-        try (Statement s = conn.createStatement();
-             ResultSet rs = s.executeQuery(
-                 "SELECT * FROM delta_scan('" + escaped + "') LIMIT " + pageSize + " OFFSET " + offset)) {
-
-            ResultSetMetaData meta = rs.getMetaData();
-            int n = meta.getColumnCount();
-            for (int i = 1; i <= n; i++) {
-                cols.add(new ColumnInfo(meta.getColumnName(i), meta.getColumnTypeName(i)));
+        String dataSql = "SELECT * FROM " + baseTable + whereClause +
+                         " LIMIT " + pageSize + " OFFSET " + offset;
+        try (PreparedStatement ps = conn.prepareStatement(dataSql)) {
+            for (int i = 0; i < filterValues.size(); i++) {
+                ps.setString(i + 1, filterValues.get(i));
             }
-            while (rs.next()) {
-                List<Object> row = new ArrayList<>(n);
+            try (ResultSet rs = ps.executeQuery()) {
+                ResultSetMetaData meta = rs.getMetaData();
+                int n = meta.getColumnCount();
                 for (int i = 1; i <= n; i++) {
-                    Object v = rs.getObject(i);
-                    // Keep numbers and booleans as-is; convert everything else to String
-                    row.add(v == null ? null : (v instanceof Number || v instanceof Boolean ? v : v.toString()));
+                    cols.add(new ColumnInfo(meta.getColumnName(i), meta.getColumnTypeName(i)));
                 }
-                rows.add(row);
+                while (rs.next()) {
+                    List<Object> row = new ArrayList<>(n);
+                    for (int i = 1; i <= n; i++) {
+                        Object v = rs.getObject(i);
+                        // Keep numbers and booleans as-is; convert everything else to String
+                        row.add(v == null ? null : (v instanceof Number || v instanceof Boolean ? v : v.toString()));
+                    }
+                    rows.add(row);
+                }
             }
         }
 
         int totalPages = pageSize > 0 ? (int) Math.ceil((double) total / pageSize) : 1;
         return new TableData(cols, rows, total, page, pageSize, totalPages);
+    }
+
+    /** Overload with no filters for backward compatibility */
+    public synchronized TableData query(String tablePath, int page, int pageSize) throws SQLException {
+        return query(tablePath, page, pageSize, Collections.emptyMap());
     }
 
     /**

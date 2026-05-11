@@ -4,8 +4,10 @@ import com.mylake.model.TableData;
 import com.mylake.model.TableInfo;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import org.jboss.logging.Logger;
 
 import java.io.IOException;
@@ -13,6 +15,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -56,7 +59,8 @@ public class DeltaLakeResource {
             @QueryParam("path") String path,
             @QueryParam("table") String table,
             @QueryParam("page") @DefaultValue("0") int page,
-            @QueryParam("size") @DefaultValue("50") int size) {
+            @QueryParam("size") @DefaultValue("50") int size,
+            @Context UriInfo uriInfo) {
 
         if (path == null || path.isBlank()) return bad("missing 'path' parameter");
         if (table == null || table.isBlank()) return bad("missing 'table' parameter");
@@ -68,12 +72,24 @@ public class DeltaLakeResource {
         page = Math.max(0, page);
         size = Math.min(1000, Math.max(1, size));
 
+        // Extract filter[colName]=value query parameters
+        Map<String, String> filters = new LinkedHashMap<>();
+        uriInfo.getQueryParameters().forEach((key, values) -> {
+            if (key.startsWith("filter[") && key.endsWith("]") && !values.isEmpty()) {
+                String colName = key.substring(7, key.length() - 1);
+                String val = values.get(0);
+                if (!colName.isBlank() && val != null && !val.isBlank()) {
+                    filters.put(colName, val);
+                }
+            }
+        });
+
         String tablePath = path.endsWith("/") || path.endsWith("\\")
             ? path + table
             : path + "/" + table;
 
         try {
-            TableData result = svc.query(tablePath, page, size);
+            TableData result = svc.query(tablePath, page, size, filters);
             return Response.ok(result).build();
         } catch (IllegalArgumentException | IllegalStateException e) {
             return bad(e.getMessage());
