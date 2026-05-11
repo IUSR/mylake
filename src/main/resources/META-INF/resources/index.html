@@ -427,6 +427,8 @@ let state = {
   lastRows: null,
   // Client-side sort state: { colIdx: number, dir: 'asc'|'desc' } or null
   sortState: null,
+  // Column visibility: Set of column indices that are hidden (client-side only)
+  hiddenCols: new Set(),
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -572,7 +574,8 @@ async function selectTable(name) {
     el.classList.toggle('active', el.dataset.name === name));
   state.table = name;
   state.page = 0;
-  state.sortState = null;  // clear sort when switching tables
+  state.sortState = null;   // clear sort when switching tables
+  state.hiddenCols = new Set();  // reset column visibility
   await loadData();
 }
 
@@ -606,6 +609,23 @@ function renderTable(d) {
       <span class="meta-badge">${totalRows.toLocaleString()} ${t('rows')}</span>
       <span class="meta-badge">·</span>
       <span class="meta-badge">${columns.length} ${t('columns')}</span>
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" id="cols-btn"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                title="Show/hide columns">
+          Columns
+        </button>
+        <ul class="dropdown-menu" id="cols-dropdown" style="min-width:180px;max-height:320px;overflow-y:auto">
+          ${columns.map((c, i) => `
+            <li>
+              <label class="dropdown-item d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" ${state.hiddenCols.has(i) ? '' : 'checked'}
+                       onchange="toggleColVisibility(${i})" style="cursor:pointer">
+                <span style="font-size:.85rem">${esc(c.name)}</span>
+              </label>
+            </li>`).join('')}
+        </ul>
+      </div>
       <button class="btn btn-sm btn-outline-secondary"
               onclick="toggleSchemaPanel()"
               title="View table schema">
@@ -652,10 +672,14 @@ function renderTable(d) {
     });
   }
 
-  // Table
+  // Table (filter hidden columns)
+  const visibleCols = columns.filter((_, i) => !state.hiddenCols.has(i));
+  const visibleIdxs = columns.map((_, i) => i).filter(i => !state.hiddenCols.has(i));
+
   const thead = `<tr>
     <th class="row-num">#</th>
-    ${columns.map((c, i) => {
+    ${visibleCols.map((c, vi) => {
+      const i       = visibleIdxs[vi];
       const isSorted = state.sortState !== null && state.sortState.colIdx === i;
       const sortCls  = isSorted ? ` sort-${state.sortState.dir}` : '';
       const icon     = isSorted ? (state.sortState.dir === 'asc' ? '▲' : '▼') : '⇕';
@@ -666,10 +690,10 @@ function renderTable(d) {
   </tr>`;
 
   const tbody = displayRows.length === 0
-    ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">${t('noData')}</td></tr>`
+    ? `<tr><td colspan="${visibleCols.length+1}" class="text-center text-muted py-4">${t('noData')}</td></tr>`
     : displayRows.map((row, i) => `<tr>
         <td class="row-num">${(start + i).toLocaleString()}</td>
-        ${row.map(v => `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`).join('')}
+        ${visibleIdxs.map(ci => { const v = row[ci]; return `<td title="${attr(v)}">${v === null ? '<span class="null-val">NULL</span>' : esc(String(v))}</td>`; }).join('')}
       </tr>`).join('');
 
   // Pagination
@@ -714,6 +738,26 @@ function renderTable(d) {
     '<div id="table-scroll"><table class="table table-sm table-hover data-tbl">' +
     '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>' +
     pager;
+}
+
+// ── Column visibility ──────────────────────────────────────────────────────────
+function toggleColVisibility(colIdx) {
+  if (state.hiddenCols.has(colIdx)) {
+    state.hiddenCols.delete(colIdx);
+  } else {
+    state.hiddenCols.add(colIdx);
+  }
+  // Re-render with cached data (no API call)
+  if (state.lastColumns && state.lastRows) {
+    renderTable({
+      columns:    state.lastColumns,
+      rows:       state.lastRows,
+      totalRows:  state.totalRows,
+      page:       state.page,
+      pageSize:   state.pageSize,
+      totalPages: state.totalPages,
+    });
+  }
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
@@ -783,9 +827,13 @@ function exportCsv() {
     return;
   }
 
-  const lines = [cols.map(c => csvQuote(c.name)).join(',')];
+  // Export only visible columns
+  const visibleIdxs = cols.map((_, i) => i).filter(i => !state.hiddenCols.has(i));
+  const visibleCols = visibleIdxs.map(i => cols[i]);
+
+  const lines = [visibleCols.map(c => csvQuote(c.name)).join(',')];
   for (const row of rows) {
-    lines.push(row.map(csvQuote).join(','));
+    lines.push(visibleIdxs.map(i => csvQuote(row[i])).join(','));
   }
   // CRLF per RFC 4180 + trailing newline.
   const csv = lines.join('\r\n') + '\r\n';
@@ -812,9 +860,13 @@ function exportJson() {
     return;
   }
 
+  // Export only visible columns
+  const visibleIdxs = cols.map((_, i) => i).filter(i => !state.hiddenCols.has(i));
+  const visibleCols = visibleIdxs.map(i => cols[i]);
+
   const data = rows.map(row => {
     const obj = {};
-    cols.forEach((c, i) => { obj[c.name] = row[i]; });
+    visibleCols.forEach((c, vi) => { obj[c.name] = row[visibleIdxs[vi]]; });
     return obj;
   });
 
