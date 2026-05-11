@@ -429,6 +429,56 @@ let state = {
   sortState: null,
 };
 
+// ── URL state serialization ────────────────────────────────────────────────────
+function serializeState() {
+  if (!state.lakePath) return;
+  const params = new URLSearchParams();
+  params.set('path', state.lakePath);
+  if (state.table)    params.set('table', state.table);
+  if (state.page > 0) params.set('page', String(state.page));
+  if (state.pageSize !== PAGE_SIZE_DEFAULT) params.set('size', String(state.pageSize));
+  history.replaceState(null, '', '#' + params.toString());
+}
+
+async function deserializeState() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return;
+  let params;
+  try { params = new URLSearchParams(hash); } catch { return; }
+  const path  = params.get('path');
+  const table = params.get('table');
+  const page  = parseInt(params.get('page') || '0', 10);
+  const size  = parseInt(params.get('size')  || String(PAGE_SIZE_DEFAULT), 10);
+  if (!path) return;
+  // Restore path
+  document.getElementById('lake-path').value = path;
+  state.lakePath = path;
+  if (Number.isFinite(size) && size > 0) { state.pageSize = Math.min(size, PAGE_SIZE_MAX); savePageSize(state.pageSize); }
+  // Load table list
+  try {
+    const d = await apiFetch('/api/tables?path=' + enc(path));
+    pushRecentPath(path);
+    if (!d.tables || d.tables.length === 0) return;
+    const list = document.getElementById('table-list');
+    list.innerHTML = d.tables.map(tbl =>
+      '<div class="tbl-item" data-name="' + attr(tbl.name) + '" onclick="selectTable(\'' + attr(tbl.name) + '\')">' +
+      '<div class="tbl-name">' + esc(tbl.name) + '</div>' +
+      '<div class="tbl-path" title="' + attr(tbl.path) + '">' + esc(tbl.path) + '</div>' +
+      '</div>').join('');
+    // Restore table selection
+    if (table && d.tables.some(tbl => tbl.name === table)) {
+      document.querySelectorAll('.tbl-item').forEach(el =>
+        el.classList.toggle('active', el.dataset.name === table));
+      state.table = table;
+      state.page  = Number.isFinite(page) && page >= 0 ? page : 0;
+      await loadData();
+    }
+  } catch {
+    // Fall back gracefully — just leave the path field filled
+    showErr('Could not restore saved view — path may no longer exist.');
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.getElementById('lake-path').addEventListener('keydown', e => {
   if (e.key === 'Enter') loadTables();
@@ -441,6 +491,8 @@ renderRecentPathsMenu();
 initDarkMode();
 applyTranslations();
 checkStatus();
+// Restore view from URL hash (if any)
+deserializeState();
 
 // ── Recent lake paths (persisted) ─────────────────────────────────────────────
 const RECENT_PATHS_LS_KEY = 'mylake.recentPaths';
@@ -543,6 +595,8 @@ async function loadTables() {
   if (!path) { showErr(t('errEnterPath')); return; }
   state.lakePath = path;
   state.table = '';
+  state.page = 0;
+  serializeState();
 
   const list = document.getElementById('table-list');
   list.innerHTML = spinner(t('loadingTables'));
@@ -573,6 +627,7 @@ async function selectTable(name) {
   state.table = name;
   state.page = 0;
   state.sortState = null;  // clear sort when switching tables
+  serializeState();
   await loadData();
 }
 
@@ -753,6 +808,7 @@ function buildPages(cur, total) {
 async function goPage(p) {
   if (p < 0 || p >= state.totalPages) return;
   state.page = p;
+  serializeState();
   await loadData();
   document.getElementById('table-scroll')?.scrollTo(0, 0);
 }
@@ -763,6 +819,7 @@ async function changeSize(n) {
   state.pageSize = size;
   state.page = 0;
   savePageSize(size);
+  serializeState();
   await loadData();
 }
 
