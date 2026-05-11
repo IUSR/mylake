@@ -159,6 +159,25 @@
     .browse-icon  { font-size: 1rem; flex-shrink: 0; }
     .browse-name  { font-size: .87rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+    /* History panel */
+    #history-panel { background: #fff; border-top: 1px solid #dee2e6; flex-shrink: 0;
+                     max-height: 260px; overflow: hidden; display: none; flex-direction: column; }
+    #history-panel.open { display: flex; }
+    #history-panel-header { padding: .35rem .85rem; background: #fafbfc; border-bottom: 1px solid #eee;
+                            display: flex; align-items: center; gap: .5rem; user-select: none; }
+    #history-list { overflow-y: auto; flex: 1; font-size: .82rem; }
+    .history-row { padding: .38rem .85rem; border-bottom: 1px solid #f5f5f5;
+                   display: flex; align-items: center; gap: 1rem; }
+    .history-row:last-child { border-bottom: none; }
+    .history-version { font-weight: 700; color: #4285f4; min-width: 3rem; }
+    .history-op { font-weight: 600; color: #212529; min-width: 6rem; }
+    .history-ts { font-size: .78rem; color: #6c757d; }
+    body.dark-mode #history-panel { background: #1e2035; border-color: #333655; }
+    body.dark-mode #history-panel-header { background: #171929; border-color: #333655; color: #8b9ec7; }
+    body.dark-mode .history-row { border-color: #2a2d4a; }
+    body.dark-mode .history-op { color: #d0d5e8; }
+    body.dark-mode .history-ts { color: #8b9ec7; }
+
     /* Schema inspector panel */
     #schema-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 260px;
                     background: #fff; border-left: 1px solid #dee2e6; display: flex;
@@ -245,6 +264,7 @@
         <div data-i18n="selectTable">Select a table from the list</div>
       </div>
     </div>
+    <!-- History panel (docked bottom, inside content-inner via renderTable) -->
     <!-- Schema inspector panel -->
     <div id="schema-panel">
       <div id="schema-panel-header">
@@ -607,6 +627,11 @@ function renderTable(d) {
       <span class="meta-badge">·</span>
       <span class="meta-badge">${columns.length} ${t('columns')}</span>
       <button class="btn btn-sm btn-outline-secondary"
+              onclick="toggleHistoryPanel()"
+              title="View table version history">
+        History
+      </button>
+      <button class="btn btn-sm btn-outline-secondary"
               onclick="toggleSchemaPanel()"
               title="View table schema">
         Schema
@@ -709,11 +734,21 @@ function renderTable(d) {
       </nav>
     </div>`;
 
+  const historyPanelHtml = `
+    <div id="history-panel">
+      <div id="history-panel-header">
+        <span style="font-size:.72rem;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.06em">Version History</span>
+        <button class="btn-close ms-auto" style="font-size:.7rem" onclick="closeHistoryPanel()" aria-label="Close history"></button>
+      </div>
+      <div id="history-list"><div class="state-box p-3 text-muted" style="font-size:.82rem">Loading…</div></div>
+    </div>`;
+
   document.getElementById('content-inner').innerHTML =
     headerHtml +
     '<div id="table-scroll"><table class="table table-sm table-hover data-tbl">' +
     '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>' +
-    pager;
+    pager +
+    historyPanelHtml;
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
@@ -829,6 +864,44 @@ function exportJson() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// ── History panel ─────────────────────────────────────────────────────────────
+async function toggleHistoryPanel() {
+  const panel = document.getElementById('history-panel');
+  if (!panel) return;
+  if (panel.classList.contains('open')) {
+    closeHistoryPanel();
+  } else {
+    panel.classList.add('open');
+    await loadHistoryData();
+  }
+}
+
+async function loadHistoryData() {
+  const list = document.getElementById('history-list');
+  if (!list || !state.table || !state.lakePath) return;
+  list.innerHTML = '<div class="state-box p-3 text-muted" style="font-size:.82rem">Loading…</div>';
+  try {
+    const d = await apiFetch('/api/table/history?path=' + enc(state.lakePath) + '&table=' + enc(state.table));
+    if (!d.history || d.history.length === 0) {
+      list.innerHTML = '<div class="state-box p-3 text-muted" style="font-size:.82rem">No history found</div>';
+      return;
+    }
+    list.innerHTML = d.history.map(h => `
+      <div class="history-row">
+        <span class="history-version">v${h.version}</span>
+        <span class="history-op">${esc(h.operation || 'UNKNOWN')}</span>
+        <span class="history-ts">${h.timestamp ? esc(h.timestamp) : '—'}</span>
+      </div>`).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="p-3 text-danger" style="font-size:.82rem">' + esc(e.message) + '</div>';
+  }
+}
+
+function closeHistoryPanel() {
+  const panel = document.getElementById('history-panel');
+  if (panel) panel.classList.remove('open');
 }
 
 // ── Schema inspector ───────────────────────────────────────────────────────────

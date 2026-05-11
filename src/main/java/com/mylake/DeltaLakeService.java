@@ -9,13 +9,17 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @ApplicationScoped
@@ -195,5 +199,61 @@ public class DeltaLakeService {
         result.put("rows", rows);
         result.put("rowCount", rows.size());
         return result;
+    }
+
+    /**
+     * Lists Delta table history by scanning _delta_log/*.json files and extracting commitInfo.
+     * Returns entries sorted newest-first (by version descending).
+     */
+    public List<Map<String, Object>> listHistory(String tablePath) throws IOException {
+        Path logDir = Path.of(tablePath, "_delta_log");
+        if (!Files.isDirectory(logDir)) {
+            throw new IllegalArgumentException("Not a Delta table (no _delta_log): " + tablePath);
+        }
+
+        List<Map<String, Object>> history = new ArrayList<>();
+        // Regex patterns to extract commitInfo fields from JSON without a heavy JSON library
+        Pattern versionPat   = Pattern.compile("\"version\"\\s*:\\s*(\\d+)");
+        Pattern timestampPat = Pattern.compile("\"timestamp\"\\s*:\\s*(\\d+)");
+        Pattern operationPat = Pattern.compile("\"operation\"\\s*:\\s*\"([^\"]+)\"");
+
+        try (Stream<Path> files = Files.list(logDir)) {
+            List<Path> jsonFiles = files
+                .filter(p -> p.getFileName().toString().endsWith(".json"))
+                .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                .toList();
+
+            for (Path jsonFile : jsonFiles) {
+                String content = Files.readString(jsonFile, StandardCharsets.UTF_8);
+                // Each line in a Delta log JSON file is an action; find the commitInfo line
+                for (String line : content.split("\n")) {
+                    if (!line.contains("\"commitInfo\"")) continue;
+                    Map<String, Object> entry = new LinkedHashMap<>();
+                    // Extract version
+                    Matcher vm = versionPat.matcher(line);
+                    long version = vm.find() ? Long.parseLong(vm.group(1)) : -1;
+                    entry.put("version", version);
+                    // Extract timestamp (epoch millis → ISO string)
+                    Matcher tm = timestampPat.matcher(line);
+                    if (tm.find()) {
+                        long epochMs = Long.parseLong(tm.group(1));
+                        entry.put("timestamp", java.time.Instant.ofEpochMilli(epochMs).toString());
+                    } else {
+                        entry.put("timestamp", null);
+                    }
+                    // Extract operation
+                    Matcher om = operationPat.matcher(line);
+                    entry.put("operation", om.find() ? om.group(1) : "UNKNOWN");
+                    history.add(entry);
+                    break; // only one commitInfo per file
+                }
+            }
+        }
+        // Sort newest-first
+        history.sort((a, b) -> Long.compare(
+            b.get("version") instanceof Long bv ? bv : -1L,
+            a.get("version") instanceof Long av ? av : -1L
+        ));
+        return history;
     }
 }
