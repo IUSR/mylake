@@ -52,6 +52,8 @@
     body.dark-mode .sql-result-tbl tbody td { border-color: #2a2d4a; }
     body.dark-mode .btn-outline-secondary:hover { background: #2e3050; color: #d0d5e8; }
     body.dark-mode .text-muted { color: #8b9ec7 !important; }
+    body.dark-mode #refresh-btn { color: #9aa5b4; border-color: #555e7a; }
+    body.dark-mode #refresh-btn:hover { background: #2e3050; color: #d0d5e8; }
 
     /* Dark mode toggle button */
     #dark-toggle { font-size: .82rem; padding: .2rem .5rem; border-radius: 4px;
@@ -623,6 +625,11 @@ function renderTable(d) {
               title="Download the current page as JSON">
         Export JSON
       </button>
+      <button id="refresh-btn" class="btn btn-sm btn-outline-secondary"
+              onclick="refreshData()"
+              title="Reload current page data">
+        ↺ Refresh
+      </button>
       <button class="btn btn-sm btn-outline-secondary" onclick="toggleSqlEditor()"
               title="Open inline SQL query editor">
         SQL Editor
@@ -714,6 +721,26 @@ function renderTable(d) {
     '<div id="table-scroll"><table class="table table-sm table-hover data-tbl">' +
     '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>' +
     pager;
+}
+
+// ── Manual data refresh ────────────────────────────────────────────────────────
+async function refreshData() {
+  if (!state.table) return;
+  const btn = document.getElementById('refresh-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⟳ Refresh';
+  }
+  try {
+    await loadData();
+  } finally {
+    // Re-find the button after DOM re-render
+    const refreshed = document.getElementById('refresh-btn');
+    if (refreshed) {
+      refreshed.disabled = false;
+      refreshed.textContent = '↺ Refresh';
+    }
+  }
 }
 
 // ── Column sort ────────────────────────────────────────────────────────────────
