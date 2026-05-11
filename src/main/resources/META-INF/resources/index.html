@@ -427,6 +427,9 @@ let state = {
   lastRows: null,
   // Client-side sort state: { colIdx: number, dir: 'asc'|'desc' } or null
   sortState: null,
+  // Server-side column filters: { colName: filterValue }
+  columnFilters: {},
+  filterBarVisible: false,
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -572,7 +575,8 @@ async function selectTable(name) {
     el.classList.toggle('active', el.dataset.name === name));
   state.table = name;
   state.page = 0;
-  state.sortState = null;  // clear sort when switching tables
+  state.sortState = null;    // clear sort when switching tables
+  state.columnFilters = {};  // clear filters when switching tables
   await loadData();
 }
 
@@ -581,7 +585,12 @@ async function loadData() {
   inner.innerHTML = spinner(t('loadingData'));
 
   try {
-    const url = '/api/table/data?path=' + enc(state.lakePath) + '&table=' + enc(state.table) + '&page=' + state.page + '&size=' + state.pageSize;
+    let url = '/api/table/data?path=' + enc(state.lakePath) + '&table=' + enc(state.table) + '&page=' + state.page + '&size=' + state.pageSize;
+    for (const [colName, val] of Object.entries(state.columnFilters)) {
+      if (val && val.trim()) {
+        url += '&filter[' + enc(colName) + ']=' + enc(val);
+      }
+    }
     const d = await apiFetch(url);
     state.totalPages = d.totalPages;
     state.totalRows  = d.totalRows;
@@ -606,6 +615,11 @@ function renderTable(d) {
       <span class="meta-badge">${totalRows.toLocaleString()} ${t('rows')}</span>
       <span class="meta-badge">·</span>
       <span class="meta-badge">${columns.length} ${t('columns')}</span>
+      <button class="btn btn-sm btn-outline-secondary${Object.values(state.columnFilters).some(v => v && v.trim()) ? ' active' : ''}"
+              onclick="toggleFilterBar()"
+              title="Toggle column filters">
+        🔍 Filter${Object.values(state.columnFilters).some(v => v && v.trim()) ? ' ●' : ''}
+      </button>
       <button class="btn btn-sm btn-outline-secondary"
               onclick="toggleSchemaPanel()"
               title="View table schema">
@@ -652,18 +666,35 @@ function renderTable(d) {
     });
   }
 
-  // Table
+  // Table (with optional filter row)
+  const filterRow = state.filterBarVisible ? `<tr style="background:#1a1f36">
+    <th class="row-num" style="background:#1a1f36"></th>
+    ${columns.map(c => {
+      const hasFilter = state.columnFilters[c.name] && state.columnFilters[c.name].trim();
+      return `<th style="background:#1a1f36;padding:3px 4px">
+        <input type="text" class="form-control form-control-sm"
+               style="font-size:.74rem;padding:2px 5px;background:${hasFilter ? '#fffbcc' : '#fff'};min-width:60px"
+               placeholder="filter…"
+               value="${attr(state.columnFilters[c.name] || '')}"
+               oninput="setColumnFilter('${attr(c.name)}', this.value)"
+               onclick="event.stopPropagation()">
+      </th>`;
+    }).join('')}
+  </tr>` : '';
+
   const thead = `<tr>
     <th class="row-num">#</th>
     ${columns.map((c, i) => {
       const isSorted = state.sortState !== null && state.sortState.colIdx === i;
       const sortCls  = isSorted ? ` sort-${state.sortState.dir}` : '';
       const icon     = isSorted ? (state.sortState.dir === 'asc' ? '▲' : '▼') : '⇕';
-      return `<th class="sortable${sortCls}" onclick="sortBy(${i})">` +
+      const hasFilter = state.columnFilters[c.name] && state.columnFilters[c.name].trim();
+      return `<th class="sortable${sortCls}${hasFilter ? ' text-warning' : ''}" onclick="sortBy(${i})">` +
         `${esc(c.name)}<span class="sort-icon">${icon}</span>` +
         `<span class="col-type">${esc(c.type)}</span></th>`;
     }).join('')}
-  </tr>`;
+  </tr>
+  ${filterRow}`;
 
   const tbody = displayRows.length === 0
     ? `<tr><td colspan="${columns.length+1}" class="text-center text-muted py-4">${t('noData')}</td></tr>`
@@ -829,6 +860,36 @@ function exportJson() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// ── Server-side column filters ─────────────────────────────────────────────────
+function toggleFilterBar() {
+  state.filterBarVisible = !state.filterBarVisible;
+  // Re-render with current data to show/hide the filter row
+  if (state.lastColumns && state.lastRows) {
+    renderTable({
+      columns:    state.lastColumns,
+      rows:       state.lastRows,
+      totalRows:  state.totalRows,
+      page:       state.page,
+      pageSize:   state.pageSize,
+      totalPages: state.totalPages,
+    });
+  }
+}
+
+let _filterDebounceTimer = null;
+function setColumnFilter(colName, value) {
+  state.columnFilters[colName] = value;
+  if (value.trim() === '') {
+    delete state.columnFilters[colName];
+  }
+  // Debounce: wait 400ms after typing before fetching
+  clearTimeout(_filterDebounceTimer);
+  _filterDebounceTimer = setTimeout(() => {
+    state.page = 0;
+    loadData();
+  }, 400);
 }
 
 // ── Schema inspector ───────────────────────────────────────────────────────────
